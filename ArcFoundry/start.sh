@@ -8,12 +8,59 @@ PYTHON_BIN="${VENV_DIR}/bin/python"
 PIP_BIN="${VENV_DIR}/bin/pip"
 CONFIG_DIR="${SDK_ROOT}/configs"
 LOG_DIR="${SDK_ROOT}/workspace/logs"
+MODELS_DIR="${SDK_ROOT}/models"
+RK_REPOS_DIR="${SDK_ROOT}/rockchip-repos"
 
 # ==============================================================================
 # Helpers
 # ==============================================================================
 func_log() { echo -e "\033[1;32m[ArcFoundry]\033[0m $1"; }
 func_err() { echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1; }
+
+# ==============================================================================
+# Level 1.5: RKNN Toolkit Management
+# ==============================================================================
+func_install_rknn() {
+    # 1. Check if already installed
+    if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        return 0
+    fi
+
+    func_log "RKNN Toolkit2 not found. Initiating auto-install..."
+
+    # 2. Define Paths
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    local repo_url="https://github.com/airockchip/rknn-toolkit2.git"
+
+    # 3. Clone if missing
+    if [ ! -d "${repo_dir}" ]; then
+        func_log "Cloning rknn-toolkit2 repository (Depth 1)..."
+        # Ensure parent dir exists
+        mkdir -p "$(dirname "${repo_dir}")"
+        git clone --depth 1 "${repo_url}" "${repo_dir}" || func_err "Failed to clone repo."
+    fi
+
+    # 4. Find the correct Wheel file for Python 3.8 (cp38) on x86_64
+    # Pattern: rknn_toolkit2-*-cp38-cp38-manylinux*x86_64.whl
+    func_log "Searching for wheel package..."
+    local search_path="${repo_dir}/rknn-toolkit2/packages/x86_64"
+    local whl_file=$(find "${search_path}" -name "rknn_toolkit2*-cp38-cp38-*x86_64.whl" | head -n 1)
+
+    if [ -z "${whl_file}" ]; then
+        func_err "Could not find compatible .whl file in: ${search_path}"
+    fi
+
+    # 5. Install
+    func_log "Installing: $(basename "${whl_file}")"
+    "${PIP_BIN}" install "${whl_file}" || func_err "Failed to install RKNN Toolkit2."
+
+    # 6. Verify
+    if ! "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        func_err "Installation completed but import failed."
+    fi
+
+    func_log "RKNN Toolkit2 installed successfully."
+}
 
 # ==============================================================================
 # Level 1: Environment Logic
@@ -35,6 +82,9 @@ func_ensure_env() {
         func_log "Installing/Updating dependencies..."
         "${PIP_BIN}" install -r "${SDK_ROOT}/requirements.txt"
     fi
+
+    # 3. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
+    func_install_rknn
 }
 
 # ==============================================================================
@@ -133,7 +183,7 @@ func_4_0_show_help() {
     echo ""
     echo "--- Maintenance Commands ---"
     echo "  clean       : Remove workspace/ and output/ directories"
-    echo "  distclean   : Remove venv/, workspace/ and output/ (Factory Reset)"
+    echo "  distclean   : Remove .venv/, workspace/ models/, rockchip-repos/ and output/ ALMOST EVERYTHING DANGER (Factory Reset)"
     echo "  init        : Force environment initialization"
     echo "  help, -h    : Show this help message"
 }
@@ -145,8 +195,15 @@ func_4_1_clean() {
 
 func_4_2_distclean() {
     func_4_1_clean
+
     rm -rf "${VENV_DIR}"
     func_log "Virtual Environment removed. Factory reset complete."
+
+    rm -rf "${MODELS_DIR}"
+    func_log "Models directory removed."
+
+    rm -rf "${RK_REPOS_DIR}"
+    func_log "Rockchip repositories removed."
 }
 
 # ==============================================================================
