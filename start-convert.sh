@@ -23,6 +23,7 @@ func_1_0_load_env(){
     SCRIPT_DIR="$(dirname ${SCRIPT_PATH})"
     REPO_TOP_DIR="${SCRIPT_DIR}"
 	RKNN_TOOLKIT2_REPO_DIR="${REPO_TOP_DIR}/rockchip-repos/rknn-toolkit2.git"
+    RKNN_TOOLKIT2_REPO_URL="https://github.com/airockchip/rknn-toolkit2.git"
 
     INSTALL_LOG_DIR="${REPO_TOP_DIR}/logs"
     INSTALL_LOG_FILE="${INSTALL_LOG_DIR}/python38_install.log"
@@ -177,6 +178,17 @@ func_2_3_install_rknn_toolkit2(){
     fi
 }
 
+# 2_4_clone_rknn_toolkit2_repo: Clone the rknn-toolkit2 repository (Level 2)
+func_2_4_clone_rknn_toolkit2_repo(){
+    if [ -d "${RKNN_TOOLKIT2_REPO_DIR}" ]; then
+        echo "rknn-toolkit2 repository already exists at ${RKNN_TOOLKIT2_REPO_DIR}" | tee -a "${INSTALL_LOG_FILE}"
+    else
+        echo "Cloning rknn-toolkit2 repository to ${RKNN_TOOLKIT2_REPO_DIR}..." | tee -a "${INSTALL_LOG_FILE}"
+        git clone ${RKNN_TOOLKIT2_REPO_URL} ${RKNN_TOOLKIT2_REPO_DIR} || return 1
+        echo "rknn-toolkit2 repository cloned successfully!" | tee -a "${INSTALL_LOG_FILE}"
+    fi
+}
+
 # main: Orchestrate the installation or cleanup process using case statement
 main(){
 	func_1_0_load_env || exit
@@ -188,6 +200,7 @@ main(){
 		prepare)
 			func_2_0_prepare_environment || exit
 			func_2_1_create_venv || exit
+            func_2_4_clone_rknn_toolkit2_repo || exit
 			echo | tee -a "${INSTALL_LOG_FILE}"
 			echo "Environment preparation completed!" | tee -a "${INSTALL_LOG_FILE}"
 			echo | tee -a "${INSTALL_LOG_FILE}"
