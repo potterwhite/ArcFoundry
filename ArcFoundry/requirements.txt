@@ -1,0 +1,6 @@
+numpy
+onnx==1.14.0
+onnxruntime
+onnx-graphsurgeon
+onnxsim
+pyyaml

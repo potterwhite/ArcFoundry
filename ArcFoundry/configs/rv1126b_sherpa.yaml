@@ -1,0 +1,50 @@
+project:
+  name: "sherpa-zipformer-rv1126b"
+  version: "1.0"
+  output_dir: "./output/rv1126b_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rv1126b"
+  # device_id: null
+
+build:
+  optimization_level: 3
+  verbose: true
+  pruning: true
+  eval_memory: false
+
+  quantization:
+    enabled: false
+    dtype: "asymmetric_quantized-8"
+    dataset: ""
+
+models:
+  - name: "encoder"
+    path: "models/onnx/encoder-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+    input_shapes:
+      - [1, 80, 50]
+
+  - name: "decoder"
+    path: "models/onnx/decoder-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+      fix_int64_type: true
+    input_shapes:
+      - [1, 512]
+
+  - name: "joiner"
+    path: "models/onnx/joiner-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+    input_shapes:
+      - [1, 512]
+      - [1, 512]

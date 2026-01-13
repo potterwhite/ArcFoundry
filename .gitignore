@@ -147,6 +147,7 @@ celerybeat.pid
 env/
 venv/
 ENV/
+
 env.bak/
 venv.bak/
 
@@ -211,3 +212,40 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ==========================================
+# ArcFoundry SDK Specific Rules
+# ==========================================
+
+# 1. 运行时生成的工作区 (日志、中间ONNX)
+# 我们只保留 workspace 目录本身(如果有.gitkeep)，但不保留里面的内容
+ArcFoundry/workspace/*
+!ArcFoundry/workspace/.gitkeep
+
+# 2. 最终产出 (RKNN 模型)
+# 绝对不要提交二进制模型文件
+ArcFoundry/output/*
+!ArcFoundry/output/.gitkeep
+
+# 3. 本地虚拟环境
+# start.sh 会自动重建它，不需要提交
+ArcFoundry/.venv/
+
+# 4. 外部挂载的模型目录
+# 这是一个软链接，或者大文件目录，不提交
+ArcFoundry/models
+
+# 5. 外部依赖库
+# rknn-toolkit2 等仓库太大，且可以通过 start.sh 或 pip 安装
+ArcFoundry/rockchip-repos/
+
+# 6. RKNN Toolkit2 产生的调试临时文件
+# 转换过程中产生的中间图，用完即弃
+ArcFoundry/check*.onnx
+ArcFoundry/verify*.onnx
+ArcFoundry/debug*.onnx
+
+# 7. IDE 和 系统缓存 (以防万一)
+ArcFoundry/.idea/
+ArcFoundry/.vscode/
+ArcFoundry/__pycache__/
