@@ -139,7 +139,6 @@ func_resolve_config() {
 
 # Mode 1: Interactive Menu (Lazy Mode)
 func_3_1_mode_menu() {
-    func_ensure_env
     func_resolve_config ""  # Passing empty triggers the menu
     func_3_9_launch_kernel
 }
@@ -147,7 +146,7 @@ func_3_1_mode_menu() {
 # Mode 2 & 3: Short Name or Explicit Path
 func_3_2_mode_direct() {
     local target="$1"
-    func_ensure_env
+
     func_resolve_config "$target"
     func_3_9_launch_kernel
 }
@@ -158,9 +157,14 @@ func_3_9_launch_kernel() {
         func_err "No configuration selected. Aborting."
     fi
     func_log "Target Config: $(basename ${SELECTED_CONFIG})"
+
+    # [新增] 选好配置后，才开始检查环境（实现 Lazy Check）
+    func_ensure_env
+
     export PYTHONPATH="${SDK_ROOT}"
     #exec "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
     "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
+    local py_ret=$?  # <--- 这行是之前缺失的，必须紧跟在 python 命令后面
 
     # --- Post-Execution Cleanup (The Shield) ---
     # Move RKNN generated intermediate files to workspace instead of littering root
