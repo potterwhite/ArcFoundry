@@ -3,11 +3,12 @@ import yaml
 from core.utils import logger, ensure_dir
 from core.preprocessor import Preprocessor
 from core.rknn_adapter import RKNNAdapter
+from core.downloader import ModelDownloader  # <--- 新增引用
 
 class PipelineEngine:
     """
     Orchestrates the conversion pipeline:
-    Config -> Preprocess -> Convert -> Output
+    Config -> Download(Optional) -> Preprocess -> Convert -> Output
     """
     def __init__(self, config_path):
         self.config_path = config_path
@@ -31,30 +32,33 @@ class PipelineEngine:
         logger.info(f"=== Starting ArcFoundry Pipeline: {project_name} on {target_plat} ===")
 
         # Initialize Helper Modules
+        downloader = ModelDownloader() # <--- 实例化下载器
         preprocessor = Preprocessor(self.cfg)
         
         models = self.cfg.get('models', [])
-        
         success_count = 0
         
         for model_cfg in models:
             model_name = model_cfg['name']
-            raw_onnx_path = model_cfg['path']
+            target_path = model_cfg['path'] # YAML里指定的目标本地路径
+            model_url = model_cfg.get('url', None) # 既然是可选的，就用 get
+
             logger.info(f"\n>>> Processing Model: {model_name}")
 
-            if not os.path.exists(raw_onnx_path):
-                logger.error(f"Input file not found: {raw_onnx_path}")
+            # --- Stage 0: Asset Management ---
+            # 检查文件是否存在，不存在则下载，下载不了则报错
+            if not downloader.ensure_model(target_path, model_url):
+                logger.error(f"Skipping {model_name} due to missing input file.")
                 continue
 
             # --- Stage 1: Preprocessing ---
-            # Define intermediate path
             processed_onnx_name = f"{model_name}.processed.onnx"
             processed_onnx_path = os.path.join(self.workspace, processed_onnx_name)
             
             strategies = model_cfg.get('preprocess', {})
             
             final_onnx_path, custom_string = preprocessor.process(
-                raw_onnx_path, 
+                target_path,  # 这里已经是确认存在的路径了
                 processed_onnx_path, 
                 strategies
             )
@@ -67,7 +71,6 @@ class PipelineEngine:
             rknn_out_path = os.path.join(self.output_dir, f"{model_name}.rknn")
             input_shapes = model_cfg.get('input_shapes', None)
             
-            # Initialize Adapter (New instance per model to ensure clean state)
             adapter = RKNNAdapter(
                 target_platform=target_plat, 
                 verbose=self.cfg.get('build', {}).get('verbose', False)

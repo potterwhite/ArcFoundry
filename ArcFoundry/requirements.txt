@@ -4,3 +4,5 @@ onnxruntime
 onnx-graphsurgeon
 onnxsim
 pyyaml
+requests
+tqdm

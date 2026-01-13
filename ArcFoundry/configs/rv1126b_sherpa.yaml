@@ -21,7 +21,8 @@ build:
 
 models:
   - name: "encoder"
-    path: "models/onnx/encoder-epoch-99-avg-1.onnx"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/encoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/encoder-epoch-99-avg-1.onnx"
     preprocess:
       fix_dynamic_shape: true
       simplify: true
@@ -30,7 +31,8 @@ models:
       - [1, 80, 50]
 
   - name: "decoder"
-    path: "models/onnx/decoder-epoch-99-avg-1.onnx"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/decoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/decoder-epoch-99-avg-1.onnx"
     preprocess:
       fix_dynamic_shape: true
       simplify: true
@@ -40,7 +42,8 @@ models:
       - [1, 512]
 
   - name: "joiner"
-    path: "models/onnx/joiner-epoch-99-avg-1.onnx"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/joiner-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/joiner-epoch-99-avg-1.onnx"
     preprocess:
       fix_dynamic_shape: true
       simplify: true
