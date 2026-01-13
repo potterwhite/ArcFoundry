@@ -1,5 +1,5 @@
 numpy
-onnx==1.14.0
+onnx>=1.16.1
 onnxruntime
 onnx-graphsurgeon
 onnxsim
