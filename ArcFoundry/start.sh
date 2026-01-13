@@ -159,7 +159,23 @@ func_3_9_launch_kernel() {
     fi
     func_log "Target Config: $(basename ${SELECTED_CONFIG})"
     export PYTHONPATH="${SDK_ROOT}"
-    exec "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
+    #exec "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
+    "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
+
+    # --- Post-Execution Cleanup (The Shield) ---
+    # Move RKNN generated intermediate files to workspace instead of littering root
+    local dump_dir="${SDK_ROOT}/workspace/rknn_dumps"
+    mkdir -p "${dump_dir}"
+
+    # Move files if they exist (suppress errors if not found)
+    mv "${SDK_ROOT}"/check*.onnx "${dump_dir}/" 2>/dev/null
+    mv "${SDK_ROOT}"/debug*.onnx "${dump_dir}/" 2>/dev/null
+
+    if [ $py_ret -ne 0 ]; then
+        func_err "Conversion failed with error code ${py_ret}."
+    fi
+
+    func_log "Done."
 }
 
 # ==============================================================================
@@ -190,7 +206,15 @@ func_4_0_show_help() {
 
 func_4_1_clean() {
     rm -rf "${SDK_ROOT}/workspace" "${SDK_ROOT}/output"
-    func_log "Workspace and Output cleaned."
+    func_log "Workspace, Output cleaned."
+
+    # 2. Clean Root Artifacts (The "check*.onnx" files)
+    rm -f "${SDK_ROOT}"/check*.onnx \
+          "${SDK_ROOT}"/debug*.onnx \
+          "${SDK_ROOT}"/verify*.onnx \
+          "${SDK_ROOT}"/*.rknn_util_*.log
+
+    func_log "root artifacts cleaned."
 }
 
 func_4_2_distclean() {
