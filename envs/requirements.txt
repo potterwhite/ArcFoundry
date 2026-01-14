@@ -6,3 +6,5 @@ onnxsim
 pyyaml
 requests
 tqdm
+librosa
+yapf
