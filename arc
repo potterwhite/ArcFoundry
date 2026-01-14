@@ -80,7 +80,7 @@ func_ensure_env() {
     # If import requests fails, we run pip install
     if ! "${PYTHON_BIN}" -c "import requests, tqdm, yaml" &> /dev/null; then
         func_log "Installing/Updating dependencies..."
-        "${PIP_BIN}" install -r "${SDK_ROOT}/requirements.txt"
+        "${PIP_BIN}" install -r "${SDK_ROOT}/envs/requirements.txt"
     fi
 
     # 3. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
