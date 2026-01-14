@@ -15,3 +15,10 @@ authors = [
 
 [tool.ruff]
 line-length = 88
+
+[tool.yapf]
+based_on_style = "pep8"
+column_limit = 100
+indent_width = 4
+split_before_logical_operator = true
+coalesce_brackets = true

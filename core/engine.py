@@ -21,8 +21,10 @@ class PipelineEngine:
         self.cfg = self._load_config(config_path)
 
         # Paths
-        self.workspace = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
-        self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        self.workspace = self.cfg.get("project",
+                                      {}).get("workspace_dir", "./workspace")
+        self.output_dir = self.cfg.get("project",
+                                       {}).get("output_dir", "./output")
 
         ensure_dir(self.workspace)
         ensure_dir(self.output_dir)
@@ -56,12 +58,14 @@ class PipelineEngine:
             # --- Stage 0: Asset Management ---
             # 检查文件是否存在，不存在则下载，下载不了则报错
             if not downloader.ensure_model(target_path, model_url):
-                logger.error(f"Skipping {model_name} due to missing input file.")
+                logger.error(
+                    f"Skipping {model_name} due to missing input file.")
                 continue
 
             # --- Stage 1: Preprocessing ---
             processed_onnx_name = f"{model_name}.processed.onnx"
-            processed_onnx_path = os.path.join(self.workspace, processed_onnx_name)
+            processed_onnx_path = os.path.join(self.workspace,
+                                               processed_onnx_name)
 
             strategies = model_cfg.get("preprocess", {})
 
@@ -102,7 +106,8 @@ class PipelineEngine:
 
                 success_count += 1
             else:
-                logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
+                logger.error(
+                    f"FAILURE: RKNN Conversion failed for {model_name}")
 
         logger.info(
             f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ==="
@@ -134,21 +139,61 @@ class PipelineEngine:
             test_audio_path = self.cfg.get("build", {}).get("test_input", None)
 
             for i, inp in enumerate(sess.get_inputs()):
-                # 处理动态 Shape
+                # 1. Handle Dynamic Shape (Replace string/None with 1)
                 static_shape = [
-                    1 if isinstance(d, str) or d is None else d for d in inp.shape
+                    1 if isinstance(d, str) or d is None else d
+                    for d in inp.shape
                 ]
 
-                if i == 0 and test_audio_path and os.path.exists(test_audio_path):
-                    logger.info(f"   Using real audio: {test_audio_path}")
-                    feats = extractor.compute(test_audio_path)
-                    if feats.shape[0] > static_shape[1]:
-                        feats = feats[: static_shape[1], :]
-                    input_feed[inp.name] = np.expand_dims(feats, axis=0)
-                else:
-                    input_feed[inp.name] = np.random.rand(*static_shape).astype(
-                        np.float32
+                # 2. Detect NumPy Data Type
+                onnx_type = inp.type
+                np_dtype = np.float32  # Default fallback
+                if "int64" in onnx_type:
+                    np_dtype = np.int64
+                elif "int32" in onnx_type:
+                    np_dtype = np.int32
+                elif "bool" in onnx_type:
+                    np_dtype = bool
+                elif "float16" in onnx_type:
+                    np_dtype = np.float16
+
+                # 处理动态 Shape
+                static_shape = [
+                    1 if isinstance(d, str) or d is None else d
+                    for d in inp.shape
+                ]
+
+                # 3. Generate Input Data
+                # Condition: Index 0 + Configured Path + File Exists + Is Float Type
+                if (i == 0 and test_audio_path
+                        and os.path.exists(test_audio_path)
+                        and np.issubdtype(np_dtype, np.floating)):
+                    logger.info(
+                        f"   Using real audio for input '{inp.name}': {test_audio_path}"
                     )
+                    feats = extractor.compute(test_audio_path)
+
+                    # Crop to target length
+                    target_len = static_shape[1]
+                    if feats.shape[0] > target_len:
+                        feats = feats[:target_len, :]
+
+                    input_feed[inp.name] = np.expand_dims(
+                        feats, axis=0).astype(np_dtype)
+
+                else:
+                    # Fallback: Random Data based on Type
+                    if np.issubdtype(np_dtype, np.integer):
+                        # Generate random integers (e.g. sequence lengths)
+                        input_feed[inp.name] = np.random.randint(
+                            0, 10, size=static_shape).astype(np_dtype)
+                    elif np_dtype == bool:
+                        input_feed[inp.name] = np.random.choice(
+                            [True, False], size=static_shape)
+                    else:
+                        # Generate random floats
+                        input_feed[inp.name] = np.random.rand(
+                            *static_shape).astype(np_dtype)
 
             # 3. 执行对比
             metrics = comparator.compare_with_onnx(onnx_path, input_feed)
