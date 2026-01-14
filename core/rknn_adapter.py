@@ -21,11 +21,14 @@
 from rknn.api import RKNN
 from core.utils import logger
 import os
+from core.quantization.analyzer import QuantizationAnalyzer
+
 
 class RKNNAdapter:
     """
     Decoupled interface for Rockchip RKNN Toolkit2.
     """
+
     def __init__(self, target_platform, verbose=False):
         self.target = target_platform
         self.verbose = verbose
@@ -33,40 +36,43 @@ class RKNNAdapter:
         self.rknn = RKNN(verbose=self.verbose)
         logger.info(f"RKNN Toolkit initialized for target: {self.target}")
 
-    def convert(self, 
-                onnx_path, 
-                output_path, 
-                input_shapes, 
-                config_dict, 
+    def convert(self,
+                onnx_path,
+                output_path,
+                input_shapes,
+                config_dict,
                 custom_string=None):
-        
+
         # 1. Config
         logger.info("--> Configuring RKNN...")
         # Map YAML config keys to rknn.config arguments
         # Note: 'target_platform' in rknn.config expects lowercase, e.g., 'rv1126'
         # The SDK user might pass 'rv1126b', we pass it as is, assuming toolkit handles it or user configured correctly.
-        
+
         rknn_config_args = {
             "target_platform": self.target,
             "optimization_level": config_dict.get('optimization_level', 3),
             "custom_string": custom_string,
             # Add other config mapping here if needed
         }
-        
+
         if config_dict.get('pruning', False):
-             rknn_config_args['model_pruning'] = True
-             
+            rknn_config_args['model_pruning'] = True
+
         # Quantization type mapping
         if config_dict.get('quantization', {}).get('enabled', False):
-             rknn_config_args['quantized_dtype'] = config_dict['quantization']['dtype']
-        
+            rknn_config_args['quantized_dtype'] = config_dict['quantization'][
+                'dtype']
+
         logger.debug(f"Config Args: {rknn_config_args}")
         self.rknn.config(**rknn_config_args)
 
         # 2. Load
         logger.info(f"--> Loading ONNX: {onnx_path}")
         # Parse input shapes [[1,80,50]] -> [[1,80,50]] (already list of lists)
-        load_ret = self.rknn.load_onnx(model=onnx_path, inputs=None, input_size_list=input_shapes)
+        load_ret = self.rknn.load_onnx(model=onnx_path,
+                                       inputs=None,
+                                       input_size_list=input_shapes)
         if load_ret != 0:
             logger.error("Load ONNX failed!")
             return False
@@ -75,11 +81,26 @@ class RKNNAdapter:
         logger.info("--> Building RKNN Model...")
         do_quant = config_dict.get('quantization', {}).get('enabled', False)
         dataset = config_dict.get('quantization', {}).get('dataset', None)
-        
+
         build_ret = self.rknn.build(do_quantization=do_quant, dataset=dataset)
         if build_ret != 0:
             logger.error("Build RKNN failed!")
             return False
+
+        # === [v0.5.0 Insert Here] 插入分析逻辑 ===
+        # 如果配置要求分析，且量化已开启，则进行 CT 扫描
+        if config_dict.get('quantization', {}).get('enabled', False):
+             # 实例化分析器，传入当前的 rknn 实例和配置
+             analyzer = QuantizationAnalyzer(self.rknn, {'build': config_dict})
+
+             # 获取我们在 engine.py 里填入的 dataset 路径
+             dataset_path = config_dict.get('quantization', {}).get('dataset')
+
+             # 执行分析 (结果保存在 output_path 的同级目录下的 analysis 文件夹)
+             import os
+             analysis_output_dir = os.path.join(os.path.dirname(output_path), "analysis")
+             analyzer.run(analysis_output_dir, dataset_path)
+        # ========================================
 
         # 4. Export
         logger.info(f"--> Exporting to: {output_path}")
