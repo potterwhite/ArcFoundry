@@ -1,0 +1,39 @@
+name: License Header Check
+
+# 触发机制：Push 到主干，或者提交 Pull Request 时触发
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  check-license:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Install addlicense tool
+        run: go install github.com/google/addlicense@latest
+
+      - name: Run License Check
+        run: |
+          echo "🔍 Checking for license headers..."
+          # 关键命令：
+          # -check: 只检查不修改，有问题返回非0
+          # -ignore: 必须和本地脚本保持一致，忽略 third_party
+          # 注意：这里不需要指定 -c Owner 或 -l License，因为 -check 只看"有没有"头注释，不严格比对内容
+
+          if ! addlicense -check -ignore "third_party/**" -ignore ".git/**" .; then
+            echo "❌ FAILED: Some files are missing license headers."
+            echo "👉 Please run 'add_copyright.sh' locally to fix it."
+            exit 1
+          fi
+
+          echo "✅ SUCCESS: All files have license headers."
