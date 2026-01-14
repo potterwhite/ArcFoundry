@@ -1,0 +1,8 @@
+numpy
+onnx>=1.16.1
+onnxruntime
+onnx-graphsurgeon
+onnxsim
+pyyaml
+requests
+tqdm
