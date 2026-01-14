@@ -5,10 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0](https://github.com/potterwhite/ArcFoundry/compare/v0.3.0...v0.4.0) (2026-01-14)
-
+## [0.5.0](https://github.com/potterwhite/ArcFoundry/compare/v0.4.0...v0.5.0) (2026-01-14)
 
 ### ✨ Added
+
+- Change release-type from "simple" to "python" for better Python project support
+- Replace simple extra-files string with jsonpath object: "$['project']['version']"
+- This ensures reliable version updates in pyproject.toml without depending on heuristic detection
+
+Fixes the previous issue where pyproject.toml version was not being bumped automatically.
+
+* **release:** migrate release-please to python strategy ([#8](https://github.com/potterwhite/ArcFoundry/issues/8)) ([dbac995](https://github.com/potterwhite/ArcFoundry/commit/dbac9950d6ad097db7e561ff4bcf1279016278c2))
+
+## [0.4.0](https://github.com/potterwhite/ArcFoundry/compare/v0.3.0...v0.4.0) (2026-01-14)
+
+### ✨ Added
+#### Summary
+This version completes the **Quantization & Verification** roadmap. It integrates the streaming calibration logic (`09_generate...py`) into the core architecture and establishes a defensive pipeline to ensure stability during the INT8 conversion process.
+
+#### Key Changes
+
+##### 1. Quantization Engine (`core/quantization/`)
+*   **Streaming Simulator**: Implemented `CalibrationGenerator` to perform streaming inference on-the-fly, capturing real hidden states (`h`, `c`) for RNN-T models.
+*   **Smart Caching**: Added detection logic to skip expensive calibration (20+ mins) if valid `.npy` artifacts exist.
+*   **Absolute Paths**: Enforced absolute path resolution to prevent RKNN Toolkit dataset parsing errors.
+
+##### 2. Robust Pipeline (`core/engine.py`)
+*   **Defensive "Firewall"**: Refactored `run()` to explicitly scrub `dataset` fields (setting to `None`) before passing config to RKNN, preventing raw FLAC file leakage that caused crashes.
+*   **Config Isolation**: Decoupled `build_config` passed to the Validator from the global config, ensuring the "Shadow Build" verification uses the correct `.npy` dataset.
+
+##### 3. Infrastructure
+*   **SSOT Versioning**: Updated `core/utils.py` to read version strictly from `pyproject.toml`.
+*   **CI/CD**: Configured `release-please` to manage `pyproject.toml` version bumping via `extra-files`.
+
+##### 4. License-Check
+* Add license comment block at the top of every files
+* Add license-check.yml in .github to guard the license block in every file in the future
+
+#### Current Status
+*   **Engineering**: ✅ PASSED. The pipeline (Audio -> Streaming Inference -> NPY -> RKNN INT8 -> Verification) is fully operational.
+*   **Accuracy**: ⚠️ WARNING. Baseline INT8 conversion for Sherpa-Zipformer shows ~0.91 Cosine Similarity on `encoder_out`. This confirms the validator is working and highlights the necessity for **Hybrid Quantization **.
+
 
 * **core:** implement quantization calibration & robust pipeline ([#5](https://github.com/potterwhite/ArcFoundry/issues/5)) ([5e76c99](https://github.com/potterwhite/ArcFoundry/commit/5e76c99058f181560e9fc9c31c3c4da3c4fa6e57))
 
