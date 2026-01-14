@@ -8,6 +8,7 @@ import numpy as np
 import onnxruntime as ort
 from core.dsp.audio_features import SherpaFeatureExtractor
 from core.verification.comparator import ModelComparator
+from core.quantization.calibrator import CalibrationGenerator
 
 
 class PipelineEngine:
@@ -81,19 +82,56 @@ class PipelineEngine:
 
             # --- Stage 2: RKNN Conversion ---
             rknn_out_path = os.path.join(self.output_dir, f"{model_name}.rknn")
-            input_shapes = model_cfg.get("input_shapes", None)
+            input_shapes = model_cfg.get('input_shapes', None)
+
+            # [Defensive Logic] 1. 深度拷贝配置，避免污染全局
+            import copy
+            build_config = copy.deepcopy(self.cfg.get('build', {}))
+
+            # [Defensive Logic] 2. 建立防火墙：默认先把 dataset 设为 None
+            # 无论 YAML 里写了什么 FLAC 路径，这里先全部屏蔽，防止 RKNN 读取报错
+            build_config['quantization']['dataset'] = None
+
+            # 3. 尝试运行量化校准
+            is_quant_enabled = self.cfg.get('build', {}).get('quantization', {}).get('enabled', False)
+
+            if is_quant_enabled:
+                # 目前只支持 Encoder 进行流式校准
+                if "encoder" in model_name.lower():
+                    logger.info(f"⚖️  Running Calibration for {model_name}...")
+                    try:
+                        calibrator = CalibrationGenerator(self.cfg)
+                        # 生成 dataset_list.txt (包含 .npy 路径)
+                        # 只有这里成功返回了路径，我们才把它填回 build_config
+                        new_dataset_path = calibrator.generate(final_onnx_path, self.workspace)
+
+                        if new_dataset_path and os.path.exists(new_dataset_path):
+                            build_config['quantization']['dataset'] = new_dataset_path
+                            logger.info(f"   Calibration dataset ready at: {new_dataset_path}")
+                        else:
+                            logger.warning("   Calibration generation returned invalid path.")
+                            # 回退机制：强制关闭量化
+                            build_config['quantization']['enabled'] = False
+                    except Exception as e:
+                        logger.error(f"   Calibration generation failed: {e}")
+                        logger.warning("   Falling back to FP16.")
+                        build_config['quantization']['enabled'] = False
+                else:
+                    # Decoder/Joiner 暂不支持，强制 FP16
+                    logger.info(f"ℹ️  Skipping quantization for non-audio model: {model_name} (FP16 mode)")
+                    build_config['quantization']['enabled'] = False
 
             adapter = RKNNAdapter(
                 target_platform=target_plat,
-                verbose=self.cfg.get("build", {}).get("verbose", False),
+                verbose=build_config.get('verbose', False)
             )
 
             ret = adapter.convert(
                 onnx_path=final_onnx_path,
                 output_path=rknn_out_path,
                 input_shapes=input_shapes,
-                config_dict=self.cfg.get("build", {}),
-                custom_string=custom_string,
+                config_dict=build_config,
+                custom_string=custom_string
             )
 
             if ret:
@@ -101,7 +139,7 @@ class PipelineEngine:
 
                 # === [新增代码在这里] ===
                 # 传入当前模型配置、处理后的ONNX路径、最终RKNN路径
-                self._verify_model(model_cfg, final_onnx_path, rknn_out_path)
+                self._verify_model(model_cfg, final_onnx_path, rknn_out_path, build_config)
                 # ======================
 
                 success_count += 1
@@ -113,7 +151,7 @@ class PipelineEngine:
             f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ==="
         )
 
-    def _verify_model(self, model_cfg, onnx_path, rknn_path):
+    def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
         """V1.1 Feature: 自动验证转换后的 RKNN 模型精度"""
         logger.info(f"🔎 Starting Verification for {model_cfg['name']}...")
 
@@ -126,7 +164,7 @@ class PipelineEngine:
             # 旧代码: comparator.load_rknn(rknn_path)
             # 新代码: 传入 onnx路径, input_shapes, 和 build配置 进行影子编译
             input_shapes = model_cfg.get("input_shapes", None)
-            build_config = self.cfg.get("build", {})
+            #build_config = self.cfg.get("build", {})
 
             comparator.prepare_simulator(onnx_path, input_shapes, build_config)
             # --- CHANGE END ---

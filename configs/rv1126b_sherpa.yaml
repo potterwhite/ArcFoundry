@@ -14,7 +14,7 @@ build:
   eval_memory: false
 
   quantization:
-    enabled: false
+    enabled: true
     dtype: "asymmetric_quantized-8"
     dataset: "./data/calibration_list.txt"  # <--- 指向刚才复制的列表
     sampling_interval: 5           # <--- 采样间隔 (每5帧存一次，平衡速度与精度)

@@ -6,6 +6,7 @@ from tqdm import tqdm
 from core.utils import logger, ensure_dir
 from core.dsp.audio_features import SherpaFeatureExtractor
 
+
 class CalibrationGenerator:
     """
     负责生成 RKNN 量化所需的校准数据集 (Calibration Dataset)。
@@ -18,14 +19,16 @@ class CalibrationGenerator:
         self.cfg = config
         # 从配置中读取采样间隔 (防止数据量爆炸)
         # 默认为 5，即每 5 帧保存一次数据
-        self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
+        self.sampling_interval = self.cfg.get('build', {}).get(
+            'quantization', {}).get('sampling_interval', 5)
 
         self.dsp = SherpaFeatureExtractor()
 
     def _load_audio_list(self, dataset_path):
         """读取 dataset 配置指定的音频列表文件"""
         if not os.path.exists(dataset_path):
-            raise FileNotFoundError(f"Calibration dataset file not found: {dataset_path}")
+            raise FileNotFoundError(
+                f"Calibration dataset file not found: {dataset_path}")
 
         with open(dataset_path, 'r') as f:
             lines = [x.strip() for x in f.readlines() if x.strip()]
@@ -54,18 +57,45 @@ class CalibrationGenerator:
             dataset_list_path: 生成的 .txt 文件路径 (传给 RKNN build 使用)
         """
         # 1. 获取数据集路径
-        dataset_cfg = self.cfg.get('build', {}).get('quantization', {}).get('dataset', None)
+        dataset_cfg = self.cfg.get('build', {}).get('quantization',
+                                                    {}).get('dataset', None)
         if not dataset_cfg:
-            logger.warning("Quantization is enabled but no 'dataset' path provided in config.")
+            logger.warning(
+                "Quantization is enabled but no 'dataset' path provided in config."
+            )
             return None
 
         audio_paths = self._load_audio_list(dataset_cfg)
-        logger.info(f"⚡ Generating calibration data from {len(audio_paths)} audio files...")
+        logger.info(
+            f"⚡ Generating calibration data from {len(audio_paths)} audio files..."
+        )
         logger.info(f"   Sampling Interval: {self.sampling_interval}")
 
         # 2. 初始化环境
         npy_dir = os.path.join(output_dir, "calibration_data")
+        list_file_path = os.path.join(output_dir, "dataset_list.txt")
+
+        # === [V1.1 Part 2 Improved] Smart Caching ===
+        # 如果 List 文件存在，且里面的第一行对应的文件也存在，我们认为缓存有效
+        if os.path.exists(list_file_path):
+            with open(list_file_path, 'r') as f:
+                first_line = f.readline().strip()
+
+            # 检查第一行的第一个文件是否存在 (简单的冒烟检查)
+            if first_line:
+                first_npy = first_line.split(' ')[0]
+                if os.path.exists(first_npy):
+                    logger.info(
+                        f"⚡ [Cache Hit] Found existing calibration data at: {list_file_path}"
+                    )
+                    logger.info(
+                        f"   Skipping regeneration. (Delete {list_file_path} to force regenerate)"
+                    )
+                    return list_file_path
+        # ============================================
+
         ensure_dir(npy_dir)
+        audio_paths = self._load_audio_list(dataset_cfg)
 
         sess = ort.InferenceSession(onnx_path)
         inputs_meta = sess.get_inputs()
@@ -78,7 +108,9 @@ class CalibrationGenerator:
         for inp in inputs_meta[1:]:
             dtype = self._get_numpy_dtype(inp.type)
             # 处理动态 Shape: 将字符串或None替换为1
-            shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
+            shape = [
+                1 if isinstance(d, str) or d is None else d for d in inp.shape
+            ]
             initial_states[inp.name] = np.zeros(shape, dtype=dtype)
 
         # 4. 遍历音频并处理
@@ -92,7 +124,7 @@ class CalibrationGenerator:
         for audio_path in tqdm(audio_paths, desc="Calibrating"):
             try:
                 # DSP Feature Extraction
-                all_features = self.dsp.compute(audio_path) # [T, 80]
+                all_features = self.dsp.compute(audio_path)  # [T, 80]
 
                 total_frames = all_features.shape[0]
                 current_states = initial_states.copy()
@@ -102,12 +134,13 @@ class CalibrationGenerator:
                 for start in range(0, total_frames, CHUNK_SHIFT):
                     end = start + CHUNK_SIZE
                     if end > total_frames:
-                        break # Drop last partial chunk
+                        break  # Drop last partial chunk
 
                     step_counter += 1
 
                     # 准备当前帧的输入数据
-                    feature_chunk = np.expand_dims(all_features[start:end, :], axis=0) # [1, 39, 80]
+                    feature_chunk = np.expand_dims(all_features[start:end, :],
+                                                   axis=0)  # [1, 39, 80]
 
                     feed_dict = {inputs_meta[0].name: feature_chunk}
                     feed_dict.update(current_states)
@@ -120,10 +153,12 @@ class CalibrationGenerator:
 
                         # Save each input tensor as .npy
                         for name, data in feed_dict.items():
-                            safe_name = name.replace('/', '_').replace(':', '_')
-                            file_path = os.path.join(npy_dir, f"{step_name}_{safe_name}.npy")
+                            safe_name = name.replace('/',
+                                                     '_').replace(':', '_')
+                            file_path = os.path.join(
+                                npy_dir, f"{step_name}_{safe_name}.npy")
                             np.save(file_path, data)
-                            step_files.append(file_path)
+                            step_files.append(os.path.abspath(file_path))
 
                         # Add to list (Space separated)
                         generated_lines.append(" ".join(step_files))
@@ -139,8 +174,8 @@ class CalibrationGenerator:
                     new_states = {}
                     for i, out_meta in enumerate(outputs_meta[1:]):
                         # 输出的第 i+1 个对应输入的第 i+1 个 (错开第一个)
-                        input_name_for_state = inputs_meta[i+1].name
-                        new_states[input_name_for_state] = outputs[i+1]
+                        input_name_for_state = inputs_meta[i + 1].name
+                        new_states[input_name_for_state] = outputs[i + 1]
 
                     current_states = new_states
 
@@ -153,5 +188,6 @@ class CalibrationGenerator:
         with open(list_file_path, "w") as f:
             f.write("\n".join(generated_lines))
 
-        logger.info(f"Calibration dataset ready: {len(generated_lines)} samples.")
+        logger.info(
+            f"Calibration dataset ready: {len(generated_lines)} samples.")
         return list_file_path
