@@ -1,13 +1,17 @@
 {
   "packages": {
     ".": {
-      "release-type": "simple",
+      "release-type": "python",
       "package-name": "ArcFoundry",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "bump-minor-pre-major": true,
       "extra-files": [
-        "pyproject.toml"
+        {
+          "type": "toml",
+          "path": "pyproject.toml",
+          "jsonpath": "$['project']['version']"
+        }
       ],
       "changelog-sections": [
         {"type": "feat", "section": "✨ Added", "hidden": false},
