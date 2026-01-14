@@ -6,6 +6,9 @@
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "bump-minor-pre-major": true,
+      "extra-files": [
+        "pyproject.toml"
+      ],
       "changelog-sections": [
         {"type": "feat", "section": "✨ Added", "hidden": false},
         {"type": "fix", "section": "🐛 Fixed", "hidden": false},
