@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/potterwhite/ArcFoundry/compare/v0.2.0...v0.3.0) (2026-01-14)
+
+
+### ✨ Added
+
+* **core:** implement automated accuracy verification pipeline (V1.1) ([#3](https://github.com/potterwhite/ArcFoundry/issues/3)) ([4c0d377](https://github.com/potterwhite/ArcFoundry/commit/4c0d377ee85fa4980d37c0b4197af989b3c0335a))
+
 ## [0.2.0](https://github.com/potterwhite/ArcFoundry/compare/v0.1.0...v0.2.0) (2026-01-14)
 
 ### ✨ Features (The Architecture Release)
