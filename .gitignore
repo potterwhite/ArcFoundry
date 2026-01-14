@@ -1,8 +1,12 @@
 
+
+
 rockchip-repos/rknn-toolkit2.git
 
 archived/
 pictures/
+output/
+workspace/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

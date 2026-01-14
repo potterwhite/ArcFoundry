@@ -138,9 +138,14 @@ models:
 *   **`extract_metadata`**: 针对 Sherpa 等将配置参数（如 Token 数量）隐藏在 ONNX Metadata 中的模型，SDK 会自动提取并通过 `custom_string` 注入 RKNN，确保推理库能正确加载模型。
 *   **`fix_int64_type`**: 针对某些导出工具导致的输入节点数据类型错误（例如本应是 INT64 却变成了未定义），在转换前强制修复。
 
----
+## 6. 开发路线图 (Roadmap)
 
-如果文档内容符合你的要求，请发命令 **"Generate Structure"**，我将为你生成：
-1.  **工程目录创建脚本**。
-2.  **`start.sh` (Bootloader)** 的完整代码。
-3.  **Core (Kernel)** 的 Python 基础框架文件。
+### V1.1 Quantization & Verification (In Progress)
+本版本致力于解决模型量化与精度验证的闭环问题，引入无需开发板（SoC）即可验证精度的机制。
+
+*   **PC 端模拟器验证 (Simulator Verification)**:
+    *   集成 RKNN Simulator，在 x86 PC 上直接运行推理。
+    *   通过对比 ONNX (FP32) 与 RKNN (Quantized) 的推理结果，计算余弦相似度 (Cosine Similarity)，自动判定量化精度是否达标。
+*   **量化校准数据集抽象 (Calibration Abstraction)**:
+    *   支持配置化生成校准数据集（Audio/Image）。
+    *   针对 ASR 模型（如 Sherpa），提供专门的 Streaming Audio 切片逻辑。
