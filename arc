@@ -29,7 +29,7 @@ func_install_rknn() {
     func_log "RKNN Toolkit2 not found. Initiating auto-install..."
 
     # 2. Define Paths
-    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git"
     local repo_url="https://github.com/airockchip/rknn-toolkit2.git"
 
     # 3. Clone if missing
