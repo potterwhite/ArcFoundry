@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/potterwhite/ArcFoundry/compare/v0.3.0...v0.4.0) (2026-01-14)
+
+
+### ✨ Added
+
+* **core:** implement quantization calibration & robust pipeline ([#5](https://github.com/potterwhite/ArcFoundry/issues/5)) ([5e76c99](https://github.com/potterwhite/ArcFoundry/commit/5e76c99058f181560e9fc9c31c3c4da3c4fa6e57))
+
 ## [0.3.0](https://github.com/potterwhite/ArcFoundry/compare/v0.2.0...v0.3.0) (2026-01-14)
 
 ### ✨ Features (Verification & DSP)
