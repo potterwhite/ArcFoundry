@@ -61,7 +61,7 @@ class ModelComparator:
         rknn_feed_list = [inputs[name] for name in onnx_input_names]
 
         logger.info("[Verify] Running RKNN Simulator Inference...")
-        rknn_outputs = self.rknn.inference(inputs=rknn_feed_list)
+        rknn_outputs = self.rknn.inference(inputs=rknn_feed_list, data_format='nchw')
 
         # 3. Compute Metrics
         metrics = {}
