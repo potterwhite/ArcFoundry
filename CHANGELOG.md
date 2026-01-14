@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0](https://github.com/potterwhite/ArcFoundry/compare/v0.2.0...v0.3.0) (2026-01-14)
 
+### ✨ Features (Verification & DSP)
 
-### ✨ Added
+* **Verification System**: Implemented automated "Zero-Hardware" accuracy validation.
+  * Introduced **Shadow Build** mechanism to enable PC-based simulation for RV1126B/RV1106 targets (bypassing export limitations).
+  * Added automatic **Cosine Similarity** checks between ONNX (FP32) and RKNN output.
+  * Implemented `core/dsp` module to align Python feature extraction with Sherpa-Onnx C++ runtime (Pre-emphasis, DC Removal).
+
+* **Core Engine**:
+  * **Type-Aware Inputs**: Automatically detects `int64`/`bool` vs `float32` ONNX inputs to generate correct dummy data for state tensors.
+  * **Hybrid Validation**: Supports validating models using real audio (via `build.test_input`) for features while simulating random states.
 
 * **core:** implement automated accuracy verification pipeline (V1.1) ([#3](https://github.com/potterwhite/ArcFoundry/issues/3)) ([4c0d377](https://github.com/potterwhite/ArcFoundry/commit/4c0d377ee85fa4980d37c0b4197af989b3c0335a))
 
