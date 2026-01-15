@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+• Implement QuantizationAnalyzer using rknn.accuracy_analysis
+• Auto deep analysis when verification score < 0.99
+• Fix dataset_list.txt parsing issue in accuracy_analysis
+• Improve log structure & add total execution time
+• Refactor verification to return min cosine similarity
+
+internal change: PipelineEngine._verify_model signature changed
+
 * **quant:** add automatic layer-wise quantization accuracy analysis & trigger on low cosine score ([#10](https://github.com/potterwhite/ArcFoundry/issues/10)) ([36bf403](https://github.com/potterwhite/ArcFoundry/commit/36bf403c932177ca068668f97026e3112bbb060d))
 
 ## [0.5.0](https://github.com/potterwhite/ArcFoundry/compare/v0.4.0...v0.5.0) (2026-01-14)
