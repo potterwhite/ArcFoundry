@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/potterwhite/ArcFoundry/compare/v0.5.0...v0.6.0) (2026-01-15)
+
+
+### ✨ Added
+
+* **quant:** add automatic layer-wise quantization accuracy analysis & trigger on low cosine score ([#10](https://github.com/potterwhite/ArcFoundry/issues/10)) ([36bf403](https://github.com/potterwhite/ArcFoundry/commit/36bf403c932177ca068668f97026e3112bbb060d))
+
 ## [0.5.0](https://github.com/potterwhite/ArcFoundry/compare/v0.4.0...v0.5.0) (2026-01-14)
 
 ### ✨ Added
