@@ -22,16 +22,18 @@ import argparse
 import sys
 from core.utils import setup_logging, logger
 from core.engine import PipelineEngine
+import time
 
 def main():
+    start_time = time.perf_counter()
     parser = argparse.ArgumentParser(description="ArcFoundry Core Engine V1.0")
     parser.add_argument('-c', '--config', required=True, help="Path to YAML configuration file")
     args = parser.parse_args()
 
     # Setup Logging
-    # We can read a preliminary verbose flag from args if we wanted, 
+    # We can read a preliminary verbose flag from args if we wanted,
     # but for now we default to INFO and let Engine re-configure if needed.
-    setup_logging(verbose=True) 
+    setup_logging(verbose=True)
 
     try:
         engine = PipelineEngine(args.config)
@@ -39,6 +41,11 @@ def main():
     except Exception as e:
         logger.exception(f"An unexpected error occurred in the kernel: {e}")
         sys.exit(1)
+
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
+    minutes, seconds = divmod(elapsed, 60)
+    logger.info(f"Total execution time: {int(minutes)} minutes and {seconds:.2f} seconds")
 
 if __name__ == "__main__":
     main()

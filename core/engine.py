@@ -29,6 +29,7 @@ import onnxruntime as ort
 from core.dsp.audio_features import SherpaFeatureExtractor
 from core.verification.comparator import ModelComparator
 from core.quantization.calibrator import CalibrationGenerator
+import time
 
 
 class PipelineEngine:
@@ -63,7 +64,7 @@ class PipelineEngine:
         )
 
         # Initialize Helper Modules
-        downloader = ModelDownloader()  # <--- 实例化下载器
+        downloader = ModelDownloader()
         preprocessor = Preprocessor(self.cfg)
 
         models = self.cfg.get("models", [])
@@ -157,7 +158,7 @@ class PipelineEngine:
             if ret:
                 logger.info(f"SUCCESS: Model saved to {rknn_out_path}")
 
-                # === [新增代码在这里] ===
+                # ======
                 # 传入当前模型配置、处理后的ONNX路径、最终RKNN路径
                 self._verify_model(model_cfg, final_onnx_path, rknn_out_path, build_config)
                 # ======================
@@ -167,9 +168,14 @@ class PipelineEngine:
                 logger.error(
                     f"FAILURE: RKNN Conversion failed for {model_name}")
 
+            logger.info(f"\n<<< Complete Model: {model_name} Processing <<<\n")
+            logger.info("***************************************************************\n\n\n")
+            time.sleep(3) # sleep three seconds to separate logs
+
         logger.info(
             f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ==="
         )
+        logger.info("==============================================================")
 
     def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
         """V1.1 Feature: 自动验证转换后的 RKNN 模型精度"""

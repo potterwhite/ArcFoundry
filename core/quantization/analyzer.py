@@ -22,13 +22,8 @@ class QuantizationAnalyzer:
             output_dir (str): Directory to save the snapshot/report.
             dataset_path (str): Path to the 'dataset_list.txt' generated during calibration.
         """
-        # 1. Check Configuration Switch
-        # Default to False because analysis is slow and disk-heavy.
-        # enable_analysis = self.cfg.get('build', {}).get('quantization', {}).get('debug_analysis', False)
 
-        # if not enable_analysis:
-        #     return
-
+        logger.info("################\n")
         logger.info("🩺 Starting Quantization Accuracy Analysis (This may take a while)...")
 
         # 2. Prepare Input Data
@@ -73,3 +68,5 @@ class QuantizationAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Accuracy Analysis crashed: {e}")
+        logger.info("################\n")
+
