@@ -149,8 +149,34 @@ class RKNNAdapter:
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
+            # [Fix] Manually load the first sample from the dataset list
+            # RKNN accuracy_analysis sometimes fails to parse complex txt lists with multiple inputs per line.
+            # We load the .npy files of the first line manually to ensure safety.
+            import numpy as np
+
+            with open(dataset_path, 'r') as f:
+                first_line = f.readline().strip()
+
+            if not first_line:
+                logger.error("Dataset list is empty!")
+                return
+
+            # Split by space to get paths for all inputs (feature + states)
+            npy_paths = first_line.split()
+            input_data_list = []
+
+            for p in npy_paths:
+                if not os.path.exists(p):
+                    logger.error(f"Input npy file not found: {p}")
+                    return
+                input_data_list.append(np.load(p))
+
+            logger.info(
+                f"   Loaded {len(input_data_list)} input tensors for analysis."
+            )
+
             # Execute analysis (target=None forces simulator mode)
-            self.rknn.accuracy_analysis(inputs=[dataset_path],
+            self.rknn.accuracy_analysis(inputs=input_data_list,
                                         output_dir=output_dir,
                                         target=None,
                                         device_id=None)
@@ -163,6 +189,8 @@ class RKNNAdapter:
 
         except Exception as e:
             logger.error(f"Accuracy Analysis crashed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def release(self):
         """Explicitly release RKNN resources."""
