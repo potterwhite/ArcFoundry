@@ -89,20 +89,21 @@ class RKNNAdapter:
             logger.error("Build RKNN failed!")
             return False
 
-        # === [v0.5.0 Insert Here] 插入分析逻辑 ===
-        # 如果配置要求分析，且量化已开启，则进行 CT 扫描
-        if config_dict.get('quantization', {}).get('enabled', False):
-             # 实例化分析器，传入当前的 rknn 实例和配置
-             analyzer = QuantizationAnalyzer(self.rknn, {'build': config_dict})
+        # # === [v0.5.0 Insert Here] 插入分析逻辑 ===
+        # # 如果配置要求分析，且量化已开启，则进行 CT 扫描
+        # if config_dict.get('quantization', {}).get('enabled', False):
+        #     # 实例化分析器，传入当前的 rknn 实例和配置
+        #     analyzer = QuantizationAnalyzer(self.rknn, {'build': config_dict})
 
-             # 获取我们在 engine.py 里填入的 dataset 路径
-             dataset_path = config_dict.get('quantization', {}).get('dataset')
+        #     # 获取我们在 engine.py 里填入的 dataset 路径
+        #     dataset_path = config_dict.get('quantization', {}).get('dataset')
 
-             # 执行分析 (结果保存在 output_path 的同级目录下的 analysis 文件夹)
-             import os
-             analysis_output_dir = os.path.join(os.path.dirname(output_path), "analysis")
-             analyzer.run(analysis_output_dir, dataset_path)
-        # ========================================
+        #     # 执行分析 (结果保存在 output_path 的同级目录下的 analysis 文件夹)
+        #     import os
+        #     analysis_output_dir = os.path.join(os.path.dirname(output_path),
+        #                                        "analysis")
+        #     analyzer.run(analysis_output_dir, dataset_path)
+        # # ========================================
         logger.info("-----------------------\n")
 
         # 4. Export
@@ -125,5 +126,45 @@ class RKNNAdapter:
             logger.info("--> (5/5). Skipping Memory Evaluation as per config.")
             logger.info("-----------------------\n")
 
-        self.rknn.release()
+        # ----------------------
+        # release timing will be handled outside to allow further analysis if needed
+        # self.rknn.release()
         return True
+
+    def run_deep_analysis(self, dataset_path, output_dir):
+        """
+        Trigger deep accuracy analysis (layer-by-layer).
+        This is a time-consuming operation.
+        """
+        logger.info("🩺 Triggering Deep Accuracy Analysis...")
+
+        if not dataset_path or not os.path.exists(dataset_path):
+            logger.error(
+                f"Cannot run analysis: Dataset list not found at {dataset_path}"
+            )
+            return
+
+        try:
+            # Ensure output directory exists
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # Execute analysis (target=None forces simulator mode)
+            self.rknn.accuracy_analysis(inputs=[dataset_path],
+                                        output_dir=output_dir,
+                                        target=None,
+                                        device_id=None)
+            logger.warning(
+                f"⚠️  Analysis Report Generated: {output_dir}/error_analysis.txt"
+            )
+            logger.warning(
+                f"⚠️  Please check the report to identify layer-wise precision loss."
+            )
+
+        except Exception as e:
+            logger.error(f"Accuracy Analysis crashed: {e}")
+
+    def release(self):
+        """Explicitly release RKNN resources."""
+        if hasattr(self, 'rknn') and self.rknn:
+            self.rknn.release()

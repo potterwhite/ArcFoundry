@@ -114,7 +114,9 @@ class PipelineEngine:
             build_config['quantization']['dataset'] = None
 
             # 3. 尝试运行量化校准
-            is_quant_enabled = self.cfg.get('build', {}).get('quantization', {}).get('enabled', False)
+            is_quant_enabled = self.cfg.get('build',
+                                            {}).get('quantization',
+                                                    {}).get('enabled', False)
 
             if is_quant_enabled:
                 # 目前只支持 Encoder 进行流式校准
@@ -124,13 +126,20 @@ class PipelineEngine:
                         calibrator = CalibrationGenerator(self.cfg)
                         # 生成 dataset_list.txt (包含 .npy 路径)
                         # 只有这里成功返回了路径，我们才把它填回 build_config
-                        new_dataset_path = calibrator.generate(final_onnx_path, self.workspace)
+                        new_dataset_path = calibrator.generate(
+                            final_onnx_path, self.workspace)
 
-                        if new_dataset_path and os.path.exists(new_dataset_path):
-                            build_config['quantization']['dataset'] = new_dataset_path
-                            logger.info(f"   Calibration dataset ready at: {new_dataset_path}")
+                        if new_dataset_path and os.path.exists(
+                                new_dataset_path):
+                            build_config['quantization'][
+                                'dataset'] = new_dataset_path
+                            logger.info(
+                                f"   Calibration dataset ready at: {new_dataset_path}"
+                            )
                         else:
-                            logger.warning("   Calibration generation returned invalid path.")
+                            logger.warning(
+                                "   Calibration generation returned invalid path."
+                            )
                             # 回退机制：强制关闭量化
                             build_config['quantization']['enabled'] = False
                     except Exception as e:
@@ -139,47 +148,76 @@ class PipelineEngine:
                         build_config['quantization']['enabled'] = False
                 else:
                     # Decoder/Joiner 暂不支持，强制 FP16
-                    logger.info(f"ℹ️  Skipping quantization for non-audio model: {model_name} (FP16 mode)")
+                    logger.info(
+                        f"ℹ️  Skipping quantization for non-audio model: {model_name} (FP16 mode)"
+                    )
                     build_config['quantization']['enabled'] = False
 
-            adapter = RKNNAdapter(
-                target_platform=target_plat,
-                verbose=build_config.get('verbose', False)
-            )
+            adapter = RKNNAdapter(target_platform=target_plat,
+                                  verbose=build_config.get('verbose', False))
 
-            ret = adapter.convert(
-                onnx_path=final_onnx_path,
-                output_path=rknn_out_path,
-                input_shapes=input_shapes,
-                config_dict=build_config,
-                custom_string=custom_string
-            )
+            ret = adapter.convert(onnx_path=final_onnx_path,
+                                  output_path=rknn_out_path,
+                                  input_shapes=input_shapes,
+                                  config_dict=build_config,
+                                  custom_string=custom_string)
 
             if ret:
                 logger.info(f"SUCCESS: Model saved to {rknn_out_path}")
 
-                # ======
-                # 传入当前模型配置、处理后的ONNX路径、最终RKNN路径
-                self._verify_model(model_cfg, final_onnx_path, rknn_out_path, build_config)
-                # ======================
+                # [Step 2] Quick Verification
+                # This runs a Shadow Build on the side to check Cosine Similarity
+                score = self._verify_model(model_cfg, final_onnx_path,
+                                           build_config)
+
+                # [Step 3] Conditional Deep Analysis
+                # Threshold set to 0.99 as requested
+                quant_enabled = build_config.get('quantization',
+                                                 {}).get('enabled', False)
+
+                if quant_enabled and score < 0.99:
+                    logger.warning(
+                        f"📉 Low Accuracy Detected ({score:.6f} < 0.99). Triggering Deep Analysis..."
+                    )
+                    # time.sleep(5)  # Short pause for log clarity
+
+                    dataset_path = build_config.get('quantization',
+                                                    {}).get('dataset')
+                    analysis_out_dir = os.path.join(self.output_dir,
+                                                    "analysis", model_name)
+
+                    # Run the time-consuming analysis using the alive adapter instance
+                    adapter.run_deep_analysis(dataset_path, analysis_out_dir)
 
                 success_count += 1
             else:
                 logger.error(
                     f"FAILURE: RKNN Conversion failed for {model_name}")
 
+            adapter.release()
+
             logger.info(f"\n<<< Complete Model: {model_name} Processing <<<\n")
-            logger.info("***************************************************************\n\n\n")
-            time.sleep(3) # sleep three seconds to separate logs
+            logger.info(
+                "***************************************************************\n\n\n"
+            )
+            time.sleep(3)  # sleep three seconds to separate logs
 
         logger.info(
             f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ==="
         )
-        logger.info("==============================================================")
+        logger.info(
+            "==============================================================")
 
-    def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
-        """V1.1 Feature: 自动验证转换后的 RKNN 模型精度"""
+    def _verify_model(self, model_cfg, onnx_path, build_config):
+        # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
+        """
+        V1.1 Feature: Auto-Verification
+        Returns:
+            float: The minimum cosine similarity score (0.0 - 1.0).
+                   Returns 1.0 if verification is skipped or crashes (to avoid false triggers).
+        """
         logger.info(f"🔎 Starting Verification for {model_cfg['name']}...")
+        min_score = 1.0  # Default safe value
 
         try:
             # 1. 初始化对比器
@@ -203,13 +241,13 @@ class PipelineEngine:
             test_audio_path = self.cfg.get("build", {}).get("test_input", None)
 
             for i, inp in enumerate(sess.get_inputs()):
-                # 1. Handle Dynamic Shape (Replace string/None with 1)
+                # a. Handle Dynamic Shape (Replace string/None with 1)
                 static_shape = [
                     1 if isinstance(d, str) or d is None else d
                     for d in inp.shape
                 ]
 
-                # 2. Detect NumPy Data Type
+                # b. Detect NumPy Data Type
                 onnx_type = inp.type
                 np_dtype = np.float32  # Default fallback
                 if "int64" in onnx_type:
@@ -227,7 +265,7 @@ class PipelineEngine:
                     for d in inp.shape
                 ]
 
-                # 3. Generate Input Data
+                # c. Generate Input Data
                 # Condition: Index 0 + Configured Path + File Exists + Is Float Type
                 if (i == 0 and test_audio_path
                         and os.path.exists(test_audio_path)
@@ -262,6 +300,10 @@ class PipelineEngine:
             # 3. 执行对比
             metrics = comparator.compare_with_onnx(onnx_path, input_feed)
 
+            # [新增] 计算最低分
+            if metrics:
+                min_score = min(metrics.values())
+
             # 4. 判定结果
             if comparator.validate_metric(metrics, threshold=0.98):
                 logger.info(
@@ -269,7 +311,7 @@ class PipelineEngine:
                 )
             else:
                 logger.warning(
-                    f"⚠️ Verification WARNING: {model_cfg['name']} accuracy might be low."
+                    f"⚠️ Verification WARNING: {model_cfg['name']} accuracy might be low (Min Score: {min_score:.6f})."
                 )
 
         except Exception as e:
@@ -277,3 +319,5 @@ class PipelineEngine:
             import traceback
 
             logger.error(traceback.format_exc())  # 打印详细堆栈方便调试
+
+        return min_score
