@@ -22,27 +22,27 @@ import logging
 import sys
 import os
 
-def setup_logging(verbose=False):
-    """Configures the global logger."""
-    level = logging.DEBUG if verbose else logging.INFO
+# def setup_logging(verbose=False):
+#     """Configures the global logger."""
+#     level = logging.DEBUG if verbose else logging.INFO
 
-    # Create a custom formatter
-    formatter = logging.Formatter(
-        fmt='[%(asctime)s] [%(levelname)s] %(message)s',
-        datefmt='%H:%M:%S'
-    )
+#     # Create a custom formatter
+#     formatter = logging.Formatter(
+#         fmt='[%(asctime)s] [%(levelname)s] %(message)s',
+#         datefmt='%H:%M:%S'
+#     )
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
+#     handler = logging.StreamHandler(sys.stdout)
+#     handler.setFormatter(formatter)
 
-    logger = logging.getLogger("ArcFoundry")
-    logger.setLevel(level)
+#     logger = logging.getLogger("ArcFoundry")
+#     logger.setLevel(level)
 
-    # Avoid duplicate handlers if setup is called multiple times
-    if not logger.handlers:
-        logger.addHandler(handler)
+#     # Avoid duplicate handlers if setup is called multiple times
+#     if not logger.handlers:
+#         logger.addHandler(handler)
 
-    return logger
+#     return logger
 
 # Global logger instance
 logger = logging.getLogger("ArcFoundry")
