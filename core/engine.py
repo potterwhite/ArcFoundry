@@ -30,6 +30,7 @@ from core.dsp.audio_features import SherpaFeatureExtractor
 from core.verification.comparator import ModelComparator
 from core.quantization.calibrator import CalibrationGenerator
 import time
+import copy
 
 
 class PipelineEngine:
@@ -78,7 +79,7 @@ class PipelineEngine:
             logger.info(f"\n>>> Processing Model: {model_name}")
 
             # --- Stage 0: Asset Management ---
-            # 检查文件是否存在，不存在则下载，下载不了则报错
+            # Ensure model file is present (download if URL provided)
             if not downloader.ensure_model(target_path, model_url):
                 logger.error(
                     f"Skipping {model_name} due to missing input file.")
@@ -92,7 +93,7 @@ class PipelineEngine:
             strategies = model_cfg.get("preprocess", {})
 
             final_onnx_path, custom_string = preprocessor.process(
-                target_path,  # 这里已经是确认存在的路径了
+                target_path,
                 processed_onnx_path,
                 strategies,
             )
@@ -104,109 +105,170 @@ class PipelineEngine:
             # --- Stage 2: RKNN Conversion ---
             rknn_out_path = os.path.join(self.output_dir, f"{model_name}.rknn")
             input_shapes = model_cfg.get('input_shapes', None)
+            build_config = self._prepare_build_config(model_name,
+                                                      final_onnx_path)
 
-            # [Defensive Logic] 1. 深度拷贝配置，避免污染全局
-            import copy
-            build_config = copy.deepcopy(self.cfg.get('build', {}))
+            # 4. 执行标准转换与评估 (Level 2)
+            score = self._convert_and_evaluate(target_plat, model_name,
+                                               final_onnx_path, rknn_out_path,
+                                               input_shapes, build_config,
+                                               custom_string, model_cfg)
 
-            # [Defensive Logic] 2. 建立防火墙：默认先把 dataset 设为 None
-            # 无论 YAML 里写了什么 FLAC 路径，这里先全部屏蔽，防止 RKNN 读取报错
-            build_config['quantization']['dataset'] = None
+            # 5. 决策点：如果精度不够，进入恢复流程 (Level 3)
+            # 只有开启了量化，且分数低，才触发
+            is_quant = build_config.get('quantization',
+                                        {}).get('enabled', False)
+            if is_quant and score < 0.99:
+                self._recover_precision(target_plat, model_name,
+                                        final_onnx_path, rknn_out_path,
+                                        input_shapes, build_config,
+                                        custom_string)
 
-            # 3. 尝试运行量化校准
-            is_quant_enabled = self.cfg.get('build',
-                                            {}).get('quantization',
-                                                    {}).get('enabled', False)
-
-            if is_quant_enabled:
-                # 目前只支持 Encoder 进行流式校准
-                if "encoder" in model_name.lower():
-                    logger.info(f"⚖️  Running Calibration for {model_name}...")
-                    try:
-                        calibrator = CalibrationGenerator(self.cfg)
-                        # 生成 dataset_list.txt (包含 .npy 路径)
-                        # 只有这里成功返回了路径，我们才把它填回 build_config
-                        new_dataset_path = calibrator.generate(
-                            final_onnx_path, self.workspace)
-
-                        if new_dataset_path and os.path.exists(
-                                new_dataset_path):
-                            build_config['quantization'][
-                                'dataset'] = new_dataset_path
-                            logger.info(
-                                f"   Calibration dataset ready at: {new_dataset_path}"
-                            )
-                        else:
-                            logger.warning(
-                                "   Calibration generation returned invalid path."
-                            )
-                            # 回退机制：强制关闭量化
-                            build_config['quantization']['enabled'] = False
-                    except Exception as e:
-                        logger.error(f"   Calibration generation failed: {e}")
-                        logger.warning("   Falling back to FP16.")
-                        build_config['quantization']['enabled'] = False
-                else:
-                    # Decoder/Joiner 暂不支持，强制 FP16
-                    logger.info(
-                        f"ℹ️  Skipping quantization for non-audio model: {model_name} (FP16 mode)"
-                    )
-                    build_config['quantization']['enabled'] = False
-
-            adapter = RKNNAdapter(target_platform=target_plat,
-                                  verbose=build_config.get('verbose', False))
-
-            ret = adapter.convert(onnx_path=final_onnx_path,
-                                  output_path=rknn_out_path,
-                                  input_shapes=input_shapes,
-                                  config_dict=build_config,
-                                  custom_string=custom_string)
-
-            if ret:
-                logger.info(f"SUCCESS: Model saved to {rknn_out_path}")
-
-                # [Step 2] Quick Verification
-                # This runs a Shadow Build on the side to check Cosine Similarity
-                score = self._verify_model(model_cfg, final_onnx_path,
-                                           build_config)
-
-                # [Step 3] Conditional Deep Analysis
-                # Threshold set to 0.99 as requested
-                quant_enabled = build_config.get('quantization',
-                                                 {}).get('enabled', False)
-
-                if quant_enabled and score < 0.99:
-                    logger.warning(
-                        f"📉 Low Accuracy Detected ({score:.6f} < 0.99). Triggering Deep Analysis..."
-                    )
-                    # time.sleep(5)  # Short pause for log clarity
-
-                    dataset_path = build_config.get('quantization',
-                                                    {}).get('dataset')
-                    analysis_out_dir = os.path.join(self.output_dir,
-                                                    "analysis", model_name)
-
-                    # Run the time-consuming analysis using the alive adapter instance
-                    adapter.run_deep_analysis(dataset_path, analysis_out_dir)
-
-                success_count += 1
-            else:
-                logger.error(
-                    f"FAILURE: RKNN Conversion failed for {model_name}")
-
-            adapter.release()
-
-            logger.info(f"\n<<< Complete Model: {model_name} Processing <<<\n")
-            logger.info(
-                "***************************************************************\n\n\n"
-            )
-            time.sleep(3)  # sleep three seconds to separate logs
+            logger.info(f"<<< Completed: {model_name} <<<\n")
+            time.sleep(1)
 
         logger.info(
             f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ==="
         )
         logger.info(
             "==============================================================")
+
+    # --------------------------------------------------------------------------
+    # Level 2: 标准转换与评估逻辑
+    # --------------------------------------------------------------------------
+    def _convert_and_evaluate(self, target_plat, model_name, onnx_path,
+                              output_path, input_shapes, build_config,
+                              custom_string, model_cfg):
+        """
+        负责一次标准的转换流程，并返回精度评分。
+        注意：这个函数负责创建 adapter，使用它，然后必须释放它。
+        """
+        adapter = RKNNAdapter(target_platform=target_plat,
+                              verbose=build_config.get('verbose', False))
+
+        # A. 转换
+        ret = adapter.convert(onnx_path, output_path, input_shapes,
+                              build_config, custom_string)
+        score = 1.0
+
+        if ret:
+            logger.info(f"SUCCESS: Standard model saved to {output_path}")
+
+            # B. 验证 (Verify)
+            score = self._verify_model(model_cfg, onnx_path, build_config)
+
+            # C. 如果分数低，利用当前还活着的 adapter 做一次“尸检” (精度分析)
+            #    这样我们就不用为了分析再重新 load 一次了
+            is_quant = build_config.get('quantization',
+                                        {}).get('enabled', False)
+            if is_quant and score < 0.99:
+                logger.warning(
+                    f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release..."
+                )
+                dataset_path = build_config.get('quantization',
+                                                {}).get('dataset')
+                analysis_dir = os.path.join(self.output_dir, "analysis",
+                                            model_name)
+                adapter.run_deep_analysis(dataset_path, analysis_dir)
+        else:
+            logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
+            score = 0.0
+
+        # 必须释放！因为如果后面要进行混合量化，我们需要一个全新的环境
+        adapter.release()
+        return score
+
+    # --------------------------------------------------------------------------
+    # Level 3: 精度恢复工作流 (混合量化)
+    # --------------------------------------------------------------------------
+    def _recover_precision(self, target_plat, model_name, onnx_path,
+                           output_path, input_shapes, base_build_config,
+                           custom_string):
+        """
+        独立的“救援”流程。包含：交互询问 -> 生成配置 -> 重新编译。
+        此时之前的 adapter 已经释放，这里完全创建新的。
+        """
+        analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+        logger.info(
+            f"\n🚑 Entering Accuracy Recovery Workflow for {model_name}...")
+
+        # 1. 交互询问
+        print(
+            f"\n[INTERVENTION] Accuracy is below threshold. Analysis saved to: {analysis_dir}"
+        )
+        choice = input(f"   >>> Enable Hybrid Quantization (FP16 mix)? [y/n]: "
+                       ).strip().lower()
+        if choice != 'y':
+            return
+
+        # 2. 准备混合量化配置
+        quant_config_path = os.path.join(analysis_dir,
+                                         "hybrid_quant_config.json")
+
+        # 为了生成配置，我们需要一个临时的 adapter 实例
+        # 这是一个干净的实例，只为了 export_config，用完即扔
+        temp_adapter = RKNNAdapter(target_plat, verbose=False)
+        if not os.path.exists(quant_config_path):
+            # logger.info("   Generating template config...")
+            temp_adapter.generate_quant_config(onnx_path, input_shapes,
+                                               quant_config_path)
+            print(f"   [CREATED] {quant_config_path}")
+        else:
+            print(f"   [FOUND] {quant_config_path}")
+        temp_adapter.release()  # 立即释放
+
+        # 3. 等待用户操作
+        print(
+            f"\n   !!! ACTION: Please edit {quant_config_path} now. Change sensitive layers to 'float16'."
+        )
+        input("   >>> Press [ENTER] when you are ready to re-build...")
+
+        # 4. 执行混合量化转换
+        logger.info(f"🔄 Re-building with Hybrid Config...")
+
+        # 注入配置路径
+        hybrid_build_config = copy.deepcopy(base_build_config)
+        hybrid_build_config['quantization'][
+            'hybrid_config_path'] = quant_config_path
+
+        # 创建用于实际转换的新 adapter
+        final_adapter = RKNNAdapter(target_plat, verbose=True)
+        ret = final_adapter.convert(onnx_path, output_path, input_shapes,
+                                    hybrid_build_config, custom_string)
+
+        if ret:
+            logger.info(f"✅ Hybrid Model successfully saved to {output_path}")
+        else:
+            logger.error(f"❌ Hybrid Conversion failed.")
+
+        final_adapter.release()
+
+    # --------------------------------------------------------------------------
+    # Assist Methods
+    # --------------------------------------------------------------------------
+    def _prepare_build_config(self, model_name, onnx_path):
+        """
+           Keep main loop clean by extracting config preparation logic
+        """
+        build_config = copy.deepcopy(self.cfg.get('build', {}))
+        build_config['quantization']['dataset'] = None
+
+        if build_config.get('quantization', {}).get('enabled', False):
+            if "encoder" in model_name.lower():
+                # only encoder models use full quantization
+                try:
+                    calibrator = CalibrationGenerator(self.cfg)
+                    ds_path = calibrator.generate(onnx_path, self.workspace)
+                    if ds_path and os.path.exists(ds_path):
+                        build_config['quantization']['dataset'] = ds_path
+                    else:
+                        build_config['quantization']['enabled'] = False
+                except:
+                    build_config['quantization']['enabled'] = False
+            else:
+                # Other models (decoder, joiner) utilize fp16 only
+                build_config['quantization']['enabled'] = False
+        return build_config
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):

@@ -59,10 +59,16 @@ class RKNNAdapter:
         if config_dict.get('pruning', False):
             rknn_config_args['model_pruning'] = True
 
-        # Quantization type mapping
-        if config_dict.get('quantization', {}).get('enabled', False):
-            rknn_config_args['quantized_dtype'] = config_dict['quantization'][
-                'dtype']
+        # Quantization setup
+        quant_config = config_dict.get('quantization', {})
+        if quant_config.get('enabled', False):
+            rknn_config_args['quantized_dtype'] = quant_config['dtype']
+            hybrid_conf = quant_config.get('hybrid_config_path')
+            if hybrid_conf and os.path.exists(hybrid_conf):
+                logger.info(
+                    f"⚡ Hybrid Quantization Enabled! Loading config: {hybrid_conf}"
+                )
+                rknn_config_args['quantization_config'] = hybrid_conf
 
         logger.debug(f"Config Args: {rknn_config_args}")
         self.rknn.config(**rknn_config_args)
@@ -130,6 +136,21 @@ class RKNNAdapter:
         # release timing will be handled outside to allow further analysis if needed
         # self.rknn.release()
         return True
+
+    def generate_quant_config(self, onnx_path, input_shapes,
+                              output_config_path):
+        """专门用于生成混合量化配置文件的 Helper"""
+        logger.info(f"📝 Generating quantization config template...")
+
+        # a. Must config RKNN first or it will complain
+        self.rknn.config(target_platform=self.target)
+
+        # b. Load ONNX
+        if self.rknn.load_onnx(model=onnx_path,
+                               inputs=None,
+                               input_size_list=input_shapes) != 0:
+            return False
+        return self.rknn.export_quantization_config(output_config_path) == 0
 
     def run_deep_analysis(self, dataset_path, output_dir):
         """
