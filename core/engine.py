@@ -50,72 +50,124 @@ class PipelineEngine:
         ensure_dir(self.workspace)
         ensure_dir(self.output_dir)
 
+    # --------------------------------------------------------------------------
+    # Assist Methods
+    # --------------------------------------------------------------------------
+    def _prepare_build_from_json(self, model_name, onnx_path):
+        """
+           Keep main loop clean by extracting config preparation logic
+        """
+        json_build_duplicate = copy.deepcopy(self.cfg.get('build', {}))
+        json_build_duplicate['quantization']['dataset'] = None
+
+        if json_build_duplicate.get('quantization', {}).get('enabled', False):
+            if "encoder" in model_name.lower():
+                # only encoder models use full quantization
+                try:
+                    # === [Optimization] Check if dataset list already exists ===
+                    # 假设生成的文件名为 calibration_list.txt (这取决于 Calibrator 的实现，通常是固定的)
+                    expected_ds_path = os.path.join(self.workspace, "calibration_list.txt")
+
+                    if os.path.exists(expected_ds_path):
+                        logger.info(f"⏩ [SKIP] Found existing calibration dataset: {expected_ds_path}")
+                        ds_path = expected_ds_path
+                    else:
+                        # 只有不存在时才生成
+                        calibrator = CalibrationGenerator(self.cfg)
+                        ds_path = calibrator.generate(onnx_path, self.workspace)
+                    # ===========================================================
+
+                    if ds_path and os.path.exists(ds_path):
+                        json_build_duplicate['quantization']['dataset'] = ds_path
+                    else:
+                        json_build_duplicate['quantization']['enabled'] = False
+                except:
+                    json_build_duplicate['quantization']['enabled'] = False
+            else:
+                # Other models (decoder, joiner) utilize fp16 only
+                json_build_duplicate['quantization']['enabled'] = False
+        return json_build_duplicate
+
     def _load_config(self, path):
         with open(path, "r") as f:
             return yaml.safe_load(f)
 
+    # --------------------------------------------------------------------------
+    # Level 1: Main Entrance
+    # --------------------------------------------------------------------------
     def run(self):
-        project_name = self.cfg.get("project", {}).get("name")
-        target_plat = self.cfg.get("target", {}).get("platform")
+        # a. Preparation -- Extract info from yaml config
+        json_project_name = self.cfg.get("project", {}).get("name")
+        json_target_platform = self.cfg.get("target", {}).get("platform")
+        json_models = self.cfg.get("models", [])
 
-        logger.info(f"=== Starting ArcFoundry Pipeline: {project_name} on {target_plat} ===")
+        # b. Preparation -- Initialize Helper Modules
+        module_downloader = ModelDownloader()
+        module_preprocessor = Preprocessor(self.cfg)
 
-        # Initialize Helper Modules
-        downloader = ModelDownloader()
-        preprocessor = Preprocessor(self.cfg)
-
-        models = self.cfg.get("models", [])
+        # c. Preparation -- Success Counter Initialization
         success_count = 0
 
-        for model_cfg in models:
-            model_name = model_cfg["name"]
-            target_path = model_cfg["path"]  # YAML里指定的目标本地路径
-            model_url = model_cfg.get("url", None)  # 既然是可选的，就用 get
+        # d. Preparation -- Echo Startup Info
+        logger.info("==============================================================")
+        logger.info(f"=== Starting ArcFoundry Pipeline: {json_project_name} on {json_target_platform} ===")
 
-            logger.info(f"\n>>> Processing Model: {model_name}")
+        # e. Main Loop -- Process Each Model
+        for json_model in json_models:
 
-            # --- Stage 0: Asset Management ---
-            # Ensure model file is present (download if URL provided)
-            if not downloader.ensure_model(target_path, model_url):
-                logger.error(f"Skipping {model_name} due to missing input file.")
+            # 1. Preparation -- Extract Single Model Info
+            json_model_name = json_model["name"]
+            json_model_path = json_model["path"]  # YAML里指定的目标本地路径
+            json_model_url = json_model.get("url", None)  # 既然是可选的，就用 get
+            json_strategies = json_model.get("preprocess", {})
+            rknn_out_path = os.path.join(self.output_dir, f"{json_model_name}.rknn")
+            json_input_shapes = json_model.get('input_shapes', None)
+
+            # 2. Preparation -- Echo helper info
+            logger.info(f"\n>>> Processing Model: {json_model_name}")
+
+            # 3. Preparation -- Verify and Download Model
+            if not module_downloader.ensure_model(json_model_path, json_model_url):
+                logger.error(f"Skipping {json_model_name} due to missing input file and download failed.")
                 continue
 
-            # --- Stage 1: Preprocessing ---
-            processed_onnx_name = f"{model_name}.processed.onnx"
+            # 4. Preparation -- Define string of ONNX model path
+            processed_onnx_name = f"{json_model_name}.processed.onnx"
             processed_onnx_path = os.path.join(self.workspace, processed_onnx_name)
+            logger.debug(f"ONNX model path: {processed_onnx_path}")
 
-            strategies = model_cfg.get("preprocess", {})
-
-            final_onnx_path, custom_string = preprocessor.process(
-                target_path,
+            # 5. Processing -- Preprocessing Stage
+            #    doing so many operations with the original model
+            #    and return the processed onnx model path back
+            processed_onnx_path, custom_string = module_preprocessor.process(
+                json_model_path,
                 processed_onnx_path,
-                strategies,
+                json_strategies,
             )
 
-            if not final_onnx_path:
-                logger.error(f"Preprocessing failed for {model_name}")
+            if not processed_onnx_path:
+                logger.error(f"Preprocessing failed for {json_model_name}")
                 continue
 
             # --- Stage 2: RKNN Conversion ---
-            rknn_out_path = os.path.join(self.output_dir, f"{model_name}.rknn")
-            input_shapes = model_cfg.get('input_shapes', None)
-            build_config = self._prepare_build_config(model_name, final_onnx_path)
+            final_json_build = self._prepare_build_from_json(json_model_name, processed_onnx_path)
 
             # 4. 执行标准转换与评估 (Level 2)
-            score = self._convert_and_evaluate(target_plat, model_name, final_onnx_path, rknn_out_path,
-                                               input_shapes, build_config, custom_string, model_cfg)
+            score = self._convert_and_evaluate(json_target_platform, json_model_name, processed_onnx_path,
+                                               rknn_out_path, json_input_shapes, final_json_build, custom_string,
+                                               json_model)
 
             # 5. 决策点：如果精度不够，进入恢复流程 (Level 3)
             # 只有开启了量化，且分数低，才触发
-            is_quant = build_config.get('quantization', {}).get('enabled', False)
+            is_quant = final_json_build.get('quantization', {}).get('enabled', False)
             if is_quant and score < 0.99:
-                self._recover_precision(target_plat, model_name, final_onnx_path, rknn_out_path, input_shapes,
-                                        build_config, custom_string)
+                self._recover_precision(json_target_platform, json_model_name, processed_onnx_path, rknn_out_path,
+                                        json_input_shapes, final_json_build, custom_string)
 
-            logger.info(f"<<< Completed: {model_name} <<<\n")
+            logger.info(f"<<< Completed: {json_model_name} <<<\n")
             time.sleep(1)
 
-        logger.info(f"\n=== Pipeline Completed: {success_count}/{len(models)} models successful ===")
+        logger.info(f"\n=== Pipeline Completed: {success_count}/{len(json_models)} models successful ===")
         logger.info("==============================================================")
 
     # --------------------------------------------------------------------------
@@ -127,6 +179,18 @@ class PipelineEngine:
         负责一次标准的转换流程，并返回精度评分。
         注意：这个函数负责创建 adapter，使用它，然后必须释放它。
         """
+        # === [Fast-Forward] Check for existing analysis report ===
+        # 如果精度分析报告已存在，说明之前跑过且失败了，直接跳过构建，强制触发混合量化修复
+        analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+        existing_report = os.path.join(analysis_dir, "error_analysis.txt")
+
+        # 只有当 RKNN 模型存在 且 分析报告也存在时，才跳过
+        if os.path.exists(output_path) and os.path.exists(existing_report):
+            logger.warning(f"⏩ [FAST-FORWARD] Found existing analysis report: {existing_report}")
+            logger.warning(f"   Skipping Build & Verification to jump straight to Hybrid Quantization logic.")
+            return 0.0  # 返回 0.0 分，强制触发 _recover_precision
+        # =========================================================
+
         adapter = RKNNAdapter(target_platform=target_plat, verbose=build_config.get('verbose', False))
 
         # A. 转换
@@ -198,7 +262,6 @@ class PipelineEngine:
         else:
             print(f"   [FOUND] {quant_config_path}")
 
-
         # 3. 等待用户操作
         print(f"\n   !!! ACTION: Please edit {quant_config_path} now.")
         print(f"   Change 'int8' to 'float16' for sensitive layers (e.g. 7206-rs).")
@@ -221,33 +284,6 @@ class PipelineEngine:
             logger.error(f"❌ Hybrid Conversion failed.")
 
         final_adapter.release()
-
-    # --------------------------------------------------------------------------
-    # Assist Methods
-    # --------------------------------------------------------------------------
-    def _prepare_build_config(self, model_name, onnx_path):
-        """
-           Keep main loop clean by extracting config preparation logic
-        """
-        build_config = copy.deepcopy(self.cfg.get('build', {}))
-        build_config['quantization']['dataset'] = None
-
-        if build_config.get('quantization', {}).get('enabled', False):
-            if "encoder" in model_name.lower():
-                # only encoder models use full quantization
-                try:
-                    calibrator = CalibrationGenerator(self.cfg)
-                    ds_path = calibrator.generate(onnx_path, self.workspace)
-                    if ds_path and os.path.exists(ds_path):
-                        build_config['quantization']['dataset'] = ds_path
-                    else:
-                        build_config['quantization']['enabled'] = False
-                except:
-                    build_config['quantization']['enabled'] = False
-            else:
-                # Other models (decoder, joiner) utilize fp16 only
-                build_config['quantization']['enabled'] = False
-        return build_config
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
