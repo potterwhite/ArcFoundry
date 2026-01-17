@@ -252,7 +252,7 @@ class PipelineEngine:
             # logger.info("   Generating template config...")
             if os.path.exists(error_analysis_path):
                 temp_adapter = RKNNAdapter(target_plat, verbose=False)
-                success = temp_adapter.generate_quant_config(onnx_path, input_shapes, quant_config_path)
+                success = temp_adapter.generate_quant_config(error_analysis_path, quant_config_path)
                 temp_adapter.release()
 
                 if success:
