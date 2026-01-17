@@ -22,7 +22,9 @@ import onnx
 import onnxsim
 import onnxruntime
 import os
+from core.quantization import strategies
 from core.utils import logger
+
 
 class Preprocessor:
     """
@@ -33,35 +35,50 @@ class Preprocessor:
     def __init__(self, config):
         self.cfg = config
 
-    def process(self, onnx_path, output_path, strategies):
+    def process(self, onnx_path, output_path, json_strategies):
         """
         Applies a series of preprocessing strategies to the ONNX model.
         """
+        # Preparation -- Define Variables
         current_model_path = onnx_path
         custom_string = None
-        
-        # 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
-        if strategies.get('extract_metadata', False):
+        modified = False
+
+        # Processing -- 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
+        if json_strategies.get('extract_metadata', False):
             logger.info("Strategy: Extracting Custom Metadata...")
             custom_string = self._extract_metadata(current_model_path)
 
-        # Load model for graph modification
+        # Preparation -- Existing Check
+        if os.path.exists(output_path):
+            try:
+                logger.info(f"[Cache Hit] Found existing file: {output_path}")
+                onnx.load(output_path)
+                logger.info("⏩ [FAST-FORWARD] Model is valid. Skipping complex preprocessing steps.\n")
+
+                return output_path, custom_string
+            except Exception:
+                logger.warning(f"   Cached model corrupted or invalid ({e}). removing and regenerating...")
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+
+        # Processing -- Load model for graph modification
         try:
             model = onnx.load(current_model_path)
         except Exception as e:
             logger.error(f"Failed to load ONNX model: {e}")
             return None, None
 
-        modified = False
-
         # 2. Fix Dynamic Shape
-        if strategies.get('fix_dynamic_shape', False):
+        if json_strategies.get('fix_dynamic_shape', False):
             logger.info("Strategy: Fixing Dynamic Shapes...")
             if self._fix_dynamic_shapes(model):
                 modified = True
 
         # 3. Fix INT64 Type (Decoder specific)
-        if strategies.get('fix_int64_type', False):
+        if json_strategies.get('fix_int64_type', False):
             logger.info("Strategy: Fixing INT64 Types for inputs...")
             if self._fix_int64_type(model):
                 modified = True
@@ -73,7 +90,7 @@ class Preprocessor:
             current_model_path = output_path
 
         # 4. Simplify (onnxsim)
-        if strategies.get('simplify', False):
+        if json_strategies.get('simplify', False):
             logger.info("Strategy: Running ONNX Simplifier...")
             current_model_path = self._simplify(current_model_path, output_path)
 
@@ -99,7 +116,7 @@ class Preprocessor:
         for input_tensor in model.graph.input:
             # Heuristic: If it's the specific 'y' input or generally needed
             # For now, apply to 'y' as seen in original script, or make generic via config later.
-            if input_tensor.name == 'y': 
+            if input_tensor.name == 'y':
                 logger.debug(f"  - Forcing input '{input_tensor.name}' to INT64")
                 input_tensor.type.tensor_type.elem_type = onnx.TensorProto.INT64
                 changed = True
@@ -127,20 +144,22 @@ class Preprocessor:
             sess_options = onnxruntime.SessionOptions()
             # Suppress logs
             sess_options.log_severity_level = 3
-            session = onnxruntime.InferenceSession(onnx_path, sess_options, providers=["CPUExecutionProvider"])
-            
+            session = onnxruntime.InferenceSession(onnx_path,
+                                                   sess_options,
+                                                   providers=["CPUExecutionProvider"])
+
             meta = session.get_modelmeta()
             custom_map = meta.custom_metadata_map
-            
+
             if not custom_map:
                 logger.warning("No custom metadata found in ONNX.")
                 return None
-            
+
             # Format: key=value;key2=value2
             kv_string = ";".join([f"{k}={v}" for k, v in custom_map.items()])
             logger.info(f"  - Captured Metadata: {kv_string}")
             return kv_string
-            
+
         except Exception as e:
             logger.error(f"Failed to extract metadata: {e}")
             return None

@@ -68,6 +68,6 @@ class CalibrationGenerator:
                 first_line = f.readline().strip()
                 # Check if the file referenced in the first line actually exists
                 if first_line and os.path.exists(first_line.split(' ')[0]):
-                    logger.info(f"⏩ [Cache Hit] Found existing calibration list: {list_file_path}")
+                    logger.info(f"⏩ [FAST-FORWARD] Found existing calibration list: {list_file_path}")
                     return True
         return False

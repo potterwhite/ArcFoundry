@@ -139,6 +139,7 @@ class PipelineEngine:
             # 5. Processing -- Preprocessing Stage
             #    doing so many operations with the original model
             #    and return the processed onnx model path back
+            logger.info(f"\n===== I. Preprocessing =====")
             processed_onnx_path, custom_string = module_preprocessor.process(
                 json_model_path,
                 processed_onnx_path,
@@ -150,15 +151,18 @@ class PipelineEngine:
                 continue
 
             # --- Stage 2: RKNN Conversion ---
+            logger.info(f"\n===== II. Calibration Dataset =====")
             final_json_build = self._prepare_build_from_json(json_model_name, processed_onnx_path)
 
             # 4. 执行标准转换与评估 (Level 2)
+            logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
             score = self._convert_and_evaluate(json_target_platform, json_model_name, processed_onnx_path,
                                                rknn_out_path, json_input_shapes, final_json_build, custom_string,
                                                json_model)
 
             # 5. 决策点：如果精度不够，进入恢复流程 (Level 3)
             # 只有开启了量化，且分数低，才触发
+            logger.info(f"\n===== IV. Precision Recovery =====")
             is_quant = final_json_build.get('quantization', {}).get('enabled', False)
             if is_quant and score < 0.99:
                 self._recover_precision(json_target_platform, json_model_name, processed_onnx_path, rknn_out_path,
@@ -231,7 +235,7 @@ class PipelineEngine:
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
         error_analysis_path = os.path.join(analysis_dir, "error_analysis.txt")
 
-        logger.info(f"\n🚑 Entering Accuracy Recovery Workflow for {model_name}...")
+        logger.info(f"🚑 Entering Accuracy Recovery Workflow for {model_name}...")
 
         # 1. 交互询问
         print(f"\n[INTERVENTION] Accuracy is below threshold. Analysis saved to: {analysis_dir}")
