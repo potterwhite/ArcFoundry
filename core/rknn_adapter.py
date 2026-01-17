@@ -21,6 +21,8 @@
 from rknn.api import RKNN
 from core.utils import logger
 import os
+import json
+import re
 from core.quantization.analyzer import QuantizationAnalyzer
 
 
@@ -62,8 +64,7 @@ class RKNNAdapter:
             # === [修改点] 加载混合量化配置 JSON 为字典 ===
             hybrid_conf_path = config_dict.get('quantization', {}).get('hybrid_config_path')
             if hybrid_conf_path and os.path.exists(hybrid_conf_path):
-                logger.info(
-                    f"⚡ Hybrid Quantization Enabled! Loading config from: {hybrid_conf_path}")
+                logger.info(f"⚡ Hybrid Quantization Enabled! Loading config from: {hybrid_conf_path}")
                 try:
                     import json
                     with open(hybrid_conf_path, 'r') as f:
@@ -129,16 +130,16 @@ class RKNNAdapter:
         """
         解析 error_analysis.txt 生成混合量化配置文件模板 (JSON)
         """
-        import json
-        import re
 
+        # Preparation -- 1. Echo welcome info
         logger.info(f"📝 Generating quantization config template from analysis report...")
 
+        # Preparation -- 2. Check report existence
         if not os.path.exists(analysis_report_path):
             logger.error(f"Analysis report not found at {analysis_report_path}")
             return False
 
-        # 默认模板结构
+        # Processing -- 3. Define data structures
         quant_config = {
             # "quantized_dtype": "asymmetric_quantized-8", # 可选，全局配置
             # "quantized_algorithm": "normal",
@@ -148,23 +149,32 @@ class RKNNAdapter:
         # 我们需要提取 LayerName
         layer_dtypes = {}
 
+        # Processing -- 4. Parse the report
         try:
             with open(analysis_report_path, 'r') as f:
                 for line in f:
+                    # Logic -- a. Strip line
                     line = line.strip()
-                    # 跳过注释和空行
-                    if not line or line.startswith('#') or line.startswith(
-                            '-') or "layer_name" in line:
+
+                    # Logic -- b. Skip non-layer lines
+                    if  not line or \
+                        line.startswith('#') or \
+                        line.startswith('-') or \
+                        "layer_name" in line:
                         continue
 
+                    # Logic -- c. Extract layer name
                     # 匹配: [Conv] 7206-rs ...
                     # 提取 [] 后面的第一个单词作为层名
                     match = re.match(r'^\[.*?\]\s+(\S+)', line)
+
+                    # Logic -- d. Default to int8 for all layers found
                     if match:
                         layer_name = match.group(1)
                         # 默认为 int8，用户将需要修改的改为 float16
                         layer_dtypes[layer_name] = "int8"
 
+            # Logic -- 5. If no layers found, Echo warning
             if not layer_dtypes:
                 logger.warning("No layers found in analysis report. Check parsing logic.")
                 return False
@@ -174,9 +184,11 @@ class RKNNAdapter:
             # 根据经验，Toolkit2 接受直接的层名映射，或者需要查阅具体版本的 manual
             # 这里我们生成最通用的 {layer: dtype} 格式
 
+            # Logic -- 6. Write to JSON
             with open(output_config_path, 'w') as f:
                 json.dump(layer_dtypes, f, indent=4)
 
+            # Logic -- 7. Return success
             return True
         except Exception as e:
             logger.error(f"Failed to generate config from report: {e}")
