@@ -126,9 +126,17 @@ class RKNNAdapter:
         # self.rknn.release()
         return True
 
-    def generate_quant_config(self, analysis_report_path, output_config_path):
+    def generate_quant_config(self, analysis_report_path, output_config_path, auto_threshold=None):
         """
-        解析 error_analysis.txt 生成混合量化配置文件模板 (JSON)
+        Parses the error_analysis.txt and generates a hybrid quantization config.
+
+        Args:
+            analysis_report_path (str): Path to the RKNN accuracy analysis txt.
+            output_config_path (str): Path where the JSON config will be saved.
+            auto_threshold (float, optional):
+                If provided (e.g., 0.99), layers with single-layer cosine similarity
+                below this value will be set to 'float16'.
+                If None, all layers are set to 'int8' for manual editing.
         """
 
         # Preparation -- 1. Echo welcome info
@@ -139,15 +147,27 @@ class RKNNAdapter:
             logger.error(f"Analysis report not found at {analysis_report_path}")
             return False
 
-        # Processing -- 3. Define data structures
-        quant_config = {
-            # "quantized_dtype": "asymmetric_quantized-8", # 可选，全局配置
-            # "quantized_algorithm": "normal",
-        }
+        # Preparation -- 3. Determine hybrid-quantization mode (Manual or Auto)
+        use_auto_mode = auto_threshold is not None
+        if use_auto_mode:
+            logger.info(f"   Mode: AUTO (Threshold: {auto_threshold})")
+        else:
+            logger.info(f"   Mode: MANUAL template generation")
 
-        # 你的 error_analysis.txt 格式: [Type] LayerName ...
-        # 我们需要提取 LayerName
-        layer_dtypes = {}
+        # Processing -- 4. Define data structures
+        layer_configs = {}
+        # Regex to capture: [Type] LayerName ... EntireCos | EntireEuc SingleCos ...
+        # Based on log: [Reshape] cached_conv1_0_rs  1.00000 | 0.0  0.99000 | 0.0
+        # We look for the pattern and specifically the 3rd number (Single Cosine).
+
+        # Pattern explanation:
+        # ^\[.*?\]\s+   : Start with [Type] and spaces
+        # (\S+)         : Capture Group 1: Layer Name (non-whitespace)
+        # \s+           : Spaces
+        # [\d\.]+\s+\|\s+[\d\.]+ : Skip Entire Cos | Entire Euc
+        # \s+           : Spaces
+        # ([\d\.]+)     : Capture Group 2: Single Cosine Score
+        line_pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
 
         # Processing -- 4. Parse the report
         try:
@@ -166,18 +186,46 @@ class RKNNAdapter:
                     # Logic -- c. Extract layer name
                     # 匹配: [Conv] 7206-rs ...
                     # 提取 [] 后面的第一个单词作为层名
-                    match = re.match(r'^\[.*?\]\s+(\S+)', line)
+                    match = line_pattern.match(line)
 
                     # Logic -- d. Default to int8 for all layers found
                     if match:
                         layer_name = match.group(1)
-                        # 默认为 int8，用户将需要修改的改为 float16
-                        layer_dtypes[layer_name] = "int8"
+                        single_cosine_str = match.group(2)
 
-            # Logic -- 5. If no layers found, Echo warning
-            if not layer_dtypes:
-                logger.warning("No layers found in analysis report. Check parsing logic.")
-                return False
+                        # Logic -- e. Determine cosine score
+                        try:
+                            single_cosine = float(single_cosine_str)
+                        except ValueError:
+                            logger.warning(
+                                f"   Could not parse cosine score for layer {layer_name}, skipping...")
+                            single_cosine = 1.0  # Default to safe value
+                            continue
+
+                        # Logic -- f. Decide layer dtype based on mode
+                        if use_auto_mode:
+                            # Auto Mode: If score is bad, use float16. Otherwise keep int8 defaults (or empty)
+                            # To be safe, we only write the overridden layers to the config.
+                            if single_cosine < auto_threshold:
+                                logger.debug(
+                                    f"   📉 Layer {layer_name} score {single_cosine:.4f} < {auto_threshold}. Set to float16."
+                                )
+                                layer_configs[layer_name] = "float16"
+                            else:
+                                # For auto mode, we usually don't need to explicitly set int8
+                                # unless we want to lock it. RKNN defaults to int8.
+                                # Let's skip writing good layers to keep config clean,
+                                # or write them as int8 if strict control is needed.
+                                pass
+                        else:
+                            # Manual Mode: Dump everything as int8 so user can see and edit.
+                            layer_configs[layer_name] = "int8"
+
+            # If Auto mode found no bad layers, but the global score was low,
+            # it might be an accumulation error.
+            if use_auto_mode and not layer_configs:
+                logger.warning(
+                    "   [Auto] No single layer dropped below threshold. Problem might be cumulative.")
 
             # Toolkit2 的混合量化配置通常是一个字典，键是层名，值是精度
             # 有时需要包裹在 'override_layer_configs' 或直接作为 config
@@ -186,7 +234,7 @@ class RKNNAdapter:
 
             # Logic -- 6. Write to JSON
             with open(output_config_path, 'w') as f:
-                json.dump(layer_dtypes, f, indent=4)
+                json.dump(layer_configs, f, indent=4)
 
             # Logic -- 7. Return success
             return True
