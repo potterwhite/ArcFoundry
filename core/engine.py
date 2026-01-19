@@ -335,13 +335,13 @@ class PipelineEngine:
 
         # 1. Ask User
         logger.info(f"\n[INTERVENTION] Accuracy is below threshold.")
-        choice = input(f"   >>> Start Hybrid Quantization Step 1? [y/n]: ").strip().lower()
+        choice = input(f"   >>> Start Hybrid Quantization Step 1/2? [Y/n]: ").strip().lower()
         if choice not in ('', 'y', 'yes'):
             return
         else:
-            logger.info(f"\n\n   🔄 Starting Hybrid Quantization Step 1...")
+            logger.info(f"\n\n   🔄 Starting Hybrid Quantization Step 1/2...")
 
-        # 2. Step 1: Generate Intermediate Files
+        # 2. Step 1/2: Generate Intermediate Files
         # We need a fresh adapter
         adapter = RKNNAdapter(target_plat, verbose=True)
         adapter.config(base_build_config, custom_string)
@@ -352,11 +352,11 @@ class PipelineEngine:
 
         dataset_path = base_build_config.get('quantization', {}).get('dataset')
         if not adapter.hybrid_step1(dataset_path):
-            logger.error("Hybrid Step 1 failed.")
+            logger.error("Hybrid Step 1/2 failed.")
             adapter.release()
             return
 
-        logger.info(f"   ✨ Step 1 Complete. Config generated at: ./{cfg_file}")
+        logger.info(f"   ✨ Step 1/2 Complete. Config generated at: ./{cfg_file}")
 
         # 3. Modify the Config (Auto vs Manual)
         logger.info("\n   [SELECT STRATEGY]")
