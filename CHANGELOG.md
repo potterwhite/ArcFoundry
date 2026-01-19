@@ -8,7 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0](https://github.com/potterwhite/ArcFoundry/compare/v0.6.0...v0.7.0) (2026-01-19)
 
 
-### ✨ Added
+### ✨ Added implement hybrid quantization workflow and refactor calibration architecture
+
+**Core Engine (`core/engine.py`):**
+- Refactor `run()` pipeline into modular stages (`_prepare_build_from_json`, `_convert_and_evaluate`).
+- Implement `_recover_precision` to handle Hybrid Quantization (Steps 1 & 2) when model accuracy is below threshold.
+- Add "Fast-Forward" logic to reuse existing analysis reports and skip redundant builds.
+
+**Calibration (`core/quantization/`):**
+- Refactor `CalibrationGenerator` to use a Strategy/Registry pattern.
+- Extract streaming-specific logic to `StreamingAudioStrategy`.
+- Implement caching in `generate()` to reuse existing dataset lists.
+
+**RKNN Adapter (`core/rknn_adapter.py`):**
+- Add wrappers for `hybrid_step1` and `hybrid_step2` to support mixed-precision building.
+- Implement `apply_hybrid_patch` to parse accuracy reports and modify quantization config files (auto-switching sensitive layers to float16).
+- Enhance regex parsing for analysis reports to support scientific notation and whitelist specific operators.
+
+**Preprocessor & Utilities:**
+- Add cache detection to `Preprocessor` to load existing processed ONNX models.
+- Implement `SmartNewlineFormatter` in `utils.py` for better log formatting.
+- Update `pyproject.toml` YAPF settings and add optimization level documentation to `rv1126b_sherpa.yaml`.
 
 * implement hybrid quantization workflow and refactor calibration architecture ([#12](https://github.com/potterwhite/ArcFoundry/issues/12)) ([d15a43b](https://github.com/potterwhite/ArcFoundry/commit/d15a43bdb728631b461c689e01245e552c92bd57))
 
