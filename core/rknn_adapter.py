@@ -424,7 +424,7 @@ class RKNNAdapter:
             'Input', 'Output', 'DataConvert',
             'Reshape', 'Transpose', 'Permute', 'Flatten',
             'Concat', 'Split', 'Slice', 'Gather', 'Resize', 'Pad', 'Clip',
-            'Softmax', 'Sigmoid' # 某些版本的 RKNN 对激活函数层也有限制，建议先加上
+            'Softmax', 'Sigmoid', 'Cast' # 某些版本的 RKNN 对激活函数层也有限制，建议先加上
         }
 
         # Preparation -- 5. Initialize bad layer account
@@ -435,26 +435,54 @@ class RKNNAdapter:
         # Matches: [Type] LayerName ... SingleCos
         # Log format: [Conv] 123_rs ... 0.999 ... 0.850
         # We need a robust regex similar to what we discussed
-        pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
+        # pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
+        # [修改点 1] 增强型正则，支持科学计数法(eE)和正负号(-+)
+        pattern = re.compile(r'^\[(.*?)\]\s+(\S+)\s+[0-9eE\.\-\+]+\s+\|\s+[0-9eE\.\-\+]+\s+([0-9eE\.\-\+]+)')
 
         with open(analysis_path, 'r') as f:
             for line in f:
-                match = pattern.match(line.strip())
-                if match:
-                    layer_type = match.group(1)
-                    layer_name = match.group(2)
+                line = line.strip()
+                if not self._match_line_valid(line):
+                    continue
 
-                    if layer_type in IGNORED_TYPES:
-                        continue
+                logger.info(f"Checking line: {line[:50]}...")
+                match = pattern.match(line)
 
-                    try:
-                        score = float(match.group(3))
-                        if score < threshold:
-                            bad_layers.add(layer_name)
-                            bad_layer_account += 1
-                            logger.debug(f"   📉 Found sensitive layer - {bad_layer_account}: {layer_name} {layer_type} (Score: {score:.4f})")
-                    except:
-                        pass
+                # [Point 2]: Add diagnostic log for failed match
+                if not match:
+                    # If the line contains a vertical bar '|' but no match, it means the regex is wrong, must print it out
+                    if '|' in line:
+                        logger.warning(f"⚠️ [REGEX FAIL] Ignored line: {line}")
+                    continue
+
+
+                layer_type = match.group(1)
+                layer_name = match.group(2)
+
+
+                # [Point 3]: Add diagnostic log for score parsing
+                try:
+                    score = float(match.group(3))
+                except ValueError:
+                    logger.error(f"❌ [NUM ERROR] Cannot parse score: {match.group(3)}")
+                    continue
+
+
+                # [Point 4]: Add diagnostic log for decision process
+                if layer_type in IGNORED_TYPES:
+                    # If it is a structural layer, print DEBUG level log (normally invisible, can be seen with verbose mode)
+                    # Or for debugging, you can temporarily change it to logger.info
+                    logger.info(f"   [SKIP] {layer_name} [{layer_type}] (Score: {score:.4f}) -> Ignored Type")
+                    continue
+
+                if score < threshold:
+                    logger.info(f"   [ADD ] {layer_name} [{layer_type}] (Score: {score:.4f}) -> ✅ Added to Patch List")
+                    bad_layers.add(layer_name)
+                    bad_layer_account += 1
+                    logger.debug(f"   📉 Found sensitive layer - {bad_layer_account}: {layer_name} {layer_type} (Score: {score:.4f})")
+                else:
+                    # Score is high enough, no need to change
+                    pass
 
         if not bad_layers:
             logger.info("   ✨ No layers found below threshold. No changes made.")
@@ -538,3 +566,12 @@ class RKNNAdapter:
 
         logger.info(f"   ✅ Patched {modified_count} layers to float16 in {cfg_path}")
         return True
+
+    def _match_line_valid(self, line):
+        if not line or \
+            line.startswith('#') or \
+            line.startswith('-') or \
+                "layer_name" in line:
+            return False
+        else:
+            return True
