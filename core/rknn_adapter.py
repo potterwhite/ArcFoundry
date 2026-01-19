@@ -436,14 +436,18 @@ class RKNNAdapter:
         # e.g., "7206-rs: asymmetric_quantized-8"
         new_lines = []
         modified_count = 0
+        i = 0
 
         with open(cfg_path, 'r') as f:
             lines = f.readlines()
 
-        for line in lines:
+        while i < len(lines):
+            line = lines[i]
+
             # Check if this line starts with a bad layer name
             # Format usually: "layer_name: type"
             parts = line.split(':')
+
             if len(parts) >= 2:
                 # ------
                 # key = parts[0].strip()
@@ -462,18 +466,38 @@ class RKNNAdapter:
                 # ------
 
                 if current_key in bad_layers:
-                    # Force to float16
+                    # 保留层名行，不替换
+                    new_lines.append(line)
+                    i += 1
 
-                    # [CRITICAL FIX]:
-                    # 1. Detect original indentation (whitespace at start)
-                    # 2. Force double quotes around the key to handle '#' or other special chars
-                    # 3. Set value to float16
+                    # 记录层名的缩进，用于判断何时离开这个层的块
+                    layer_indent = len(line) - len(line.lstrip())
+                    dtype_found = False
 
-                    indent = line[:len(line) - len(line.lstrip())]
-                    new_line = f'{indent}"{current_key}": float16\n'
+                    # 继续读取这个层的后续行，直到找到 dtype 或离开这个层
+                    while i < len(lines):
+                        current_line = lines[i]
+                        current_indent = len(current_line) - len(current_line.lstrip())
 
-                    new_lines.append(new_line)
-                    modified_count += 1
+                        # 如果缩进相同或更少，说明已经离开这个层的块了
+                        if current_line.strip() and current_indent <= layer_indent:
+                            break
+
+                        # 找到 dtype 行，修改它
+                        if current_line.strip().startswith('dtype:'):
+                            indent = current_line[:len(current_line) - len(current_line.lstrip())]
+                            new_lines.append(f'{indent}dtype: float16\n')
+                            dtype_found = True
+                            modified_count += 1
+                            i += 1
+                            continue
+
+                        # 其他行原样保留
+                        new_lines.append(current_line)
+                        i += 1
+
+                    if not dtype_found:
+                        logger.warning(f"   ⚠️  Could not find dtype field for layer {current_key}")
                     continue
 
             new_lines.append(line)
