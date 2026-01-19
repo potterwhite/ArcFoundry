@@ -501,6 +501,7 @@ class RKNNAdapter:
                     continue
 
             new_lines.append(line)
+            i += 1
 
         # 3. Save back
         with open(cfg_path, 'w') as f:
