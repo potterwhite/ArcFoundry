@@ -28,7 +28,12 @@ target:
   # device_id: null
 
 build:
-  optimization_level: 3
+  # Optimization Level (0-3): Controls the aggressiveness of graph fusion.
+  # 0: Off / Debug. No optimization. Compiles the graph "as-is". Highest stability for sensitive ops (Div/Softmax) but slowest speed.
+  # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
+  # 2: Balanced. Standard optimizations suitable for most CV models.
+  # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
+  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
   verbose: true
   pruning: true
   eval_memory: false
