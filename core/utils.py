@@ -22,27 +22,39 @@ import logging
 import sys
 import os
 
-def setup_logging(verbose=False):
-    """Configures the global logger."""
-    level = logging.DEBUG if verbose else logging.INFO
+# 1. Define the Custom Formatter
+class SmartNewlineFormatter(logging.Formatter):
+    """
+    A custom formatter that detects leading newlines in the log message
+    and moves them to the very beginning of the final output string,
+    before the log prefix (timestamp, level, etc.).
+    """
+    def format(self, record):
+        # Ensure message is a string
+        original_msg = str(record.msg)
 
-    # Create a custom formatter
-    formatter = logging.Formatter(
-        fmt='[%(asctime)s] [%(levelname)s] %(message)s',
-        datefmt='%H:%M:%S'
-    )
+        # Check for leading newlines
+        if original_msg.startswith('\n'):
+            # Calculate the number of leading newlines
+            stripped_msg = original_msg.lstrip('\n')
+            newline_count = len(original_msg) - len(stripped_msg)
+            prefix_newlines = '\n' * newline_count
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
+            # --- The Trick ---
+            # 1. Temporarily strip newlines from the record message
+            record.msg = stripped_msg
 
-    logger = logging.getLogger("ArcFoundry")
-    logger.setLevel(level)
+            # 2. Let the parent class format the standard line (Prefix + Message)
+            formatted_line = super().format(record)
 
-    # Avoid duplicate handlers if setup is called multiple times
-    if not logger.handlers:
-        logger.addHandler(handler)
+            # 3. Restore the original message (good practice for other handlers)
+            record.msg = original_msg
 
-    return logger
+            # 4. Prepend the newlines to the very front
+            return prefix_newlines + formatted_line
+
+        # Default behavior for messages without leading newlines
+        return super().format(record)
 
 # Global logger instance
 logger = logging.getLogger("ArcFoundry")
@@ -79,7 +91,11 @@ def setup_logging(verbose=False):
     log_level = logging.DEBUG if verbose else logging.INFO
 
     # Create Formatter
-    formatter = logging.Formatter(
+    # formatter = logging.Formatter(
+    #     fmt=f"[ArcFoundry v{ver}] %(asctime)s [%(levelname)s] %(message)s",
+    #     datefmt="%H:%M:%S"
+    # )
+    formatter = SmartNewlineFormatter(
         fmt=f"[ArcFoundry v{ver}] %(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S"
     )

@@ -18,37 +18,27 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-[project]
-name = "arcfoundry"
-version = "0.6.0"
-description = "Standardized RKNN Conversion SDK"
-readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "MIT"}
-authors = [
-    {name = "PotterWhite", email = "themanuknowwhom@outlook.com"}
-]
+# core/quantization/strategies/__init__.py
 
-# [Strategy]
-# Dependencies are managed via 'envs/requirements.txt' for the runtime environment.
-# This file serves as project metadata and tool configuration.
+_STRATEGY_REGISTRY = {}
 
-[tool.ruff]
-line-length = 88
+def register_strategy(name):
+    """
+    Decorator to register a calibration strategy class.
 
-[tool.yapf]
-based_on_style = "pep8"
-column_limit = 110
-indent_width = 4
-split_before_logical_operator = true
-coalesce_brackets = true
+    Args:
+        name (str): The unique identifier for the strategy (e.g., 'streaming_audio').
+    """
+    def decorator(cls):
+        _STRATEGY_REGISTRY[name] = cls
+        return cls
+    return decorator
 
-# 增加“拆行”的惩罚值，让 YAPF 极其不愿意拆行
-split_penalty_for_added_line_split = 10000
-
-# 强制在逗号分隔的参数列表中，尽量保持在同一行
-split_before_first_argument = false
-split_arguments_when_comma_terminated = false
-
-# 禁止在字典的值前面拆行（针对你的 {}）
-allow_split_before_dict_value = false
+def get_strategy_class(name):
+    """
+    Retrieve a strategy class by its name.
+    """
+    if name not in _STRATEGY_REGISTRY:
+        raise ValueError(f"Unknown calibration strategy: '{name}'. "
+                         f"Available strategies: {list(_STRATEGY_REGISTRY.keys())}")
+    return _STRATEGY_REGISTRY[name]
