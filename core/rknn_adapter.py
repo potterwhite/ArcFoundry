@@ -38,57 +38,114 @@ class RKNNAdapter:
         self.rknn = RKNN(verbose=self.verbose)
         logger.info(f"RKNN Toolkit initialized for target: {self.target}")
 
-    def convert(self, onnx_path, output_path, input_shapes, config_dict, custom_string=None):
 
-        # 1. Config
-        logger.info("--> (1/5). Configuring RKNN...")
-        # Map YAML config keys to rknn.config arguments
-        # Note: 'target_platform' in rknn.config expects lowercase, e.g., 'rv1126'
-        # The SDK user might pass 'rv1126b', we pass it as is, assuming toolkit handles it or user configured correctly.
+    def config(self, config_dict, custom_string=None):
+        """
+        Independent configuration method.
+        """
+        logger.info("--> Configuring RKNN...")
 
         rknn_config_args = {
             "target_platform": self.target,
             "optimization_level": config_dict.get('optimization_level', 3),
             "custom_string": custom_string,
-            # Add other config mapping here if needed
         }
 
         if config_dict.get('pruning', False):
             rknn_config_args['model_pruning'] = True
 
-        # Quantization setup
+        # Standard quantization setup
         quant_config = config_dict.get('quantization', {})
         if quant_config.get('enabled', False):
-            rknn_config_args['quantized_dtype'] = quant_config['dtype']
-
-            # === [修改点] 加载混合量化配置 JSON 为字典 ===
-            hybrid_conf_path = config_dict.get('quantization', {}).get('hybrid_config_path')
-            if hybrid_conf_path and os.path.exists(hybrid_conf_path):
-                logger.info(f"⚡ Hybrid Quantization Enabled! Loading config from: {hybrid_conf_path}")
-                try:
-                    import json
-                    with open(hybrid_conf_path, 'r') as f:
-                        quant_config_dict = json.load(f)
-
-                    # 这里的参数名根据 SDK 版本可能不同，Toolkit2 常用 'quantization_config' 或直接合并
-                    # 通常 safe 的做法是直接传给 config
-                    rknn_config_args['quantization_config'] = quant_config_dict
-                except Exception as e:
-                    logger.error(f"Failed to load hybrid config: {e}")
-            # ==========================================
+            # Default to what's in config, or fallback
+            rknn_config_args['quantized_dtype'] = quant_config.get('dtype', 'asymmetric_quantized-8')
 
         logger.debug(f"Config Args: {rknn_config_args}")
         self.rknn.config(**rknn_config_args)
+
+    def load_onnx(self, onnx_path, input_shapes):
+        """
+        Independent Load ONNX method.
+        """
+        logger.info(f"--> Loading ONNX: {onnx_path}")
+        # Parse input shapes [[1,80,50]] -> [[1,80,50]] (already list of lists)
+        ret = self.rknn.load_onnx(model=onnx_path, inputs=None, input_size_list=input_shapes)
+        if ret != 0:
+            logger.error("Load ONNX failed!")
+            return False
+        return True
+
+    def export(self, output_path):
+        """
+        Independent Export method.
+        """
+        logger.info(f"--> Exporting to: {output_path}")
+        ret = self.rknn.export_rknn(output_path)
+        if ret != 0:
+            logger.error("Export RKNN failed!")
+            return False
+        return True
+
+    def convert(self, onnx_path, output_path, input_shapes, config_dict, custom_string=None):
+
+        # # 1. Config
+        # logger.info("--> (1/5). Configuring RKNN...")
+        # # Map YAML config keys to rknn.config arguments
+        # # Note: 'target_platform' in rknn.config expects lowercase, e.g., 'rv1126'
+        # # The SDK user might pass 'rv1126b', we pass it as is, assuming toolkit handles it or user configured correctly.
+
+        # rknn_config_args = {
+        #     "target_platform": self.target,
+        #     "optimization_level": config_dict.get('optimization_level', 3),
+        #     "custom_string": custom_string,
+        #     # Add other config mapping here if needed
+        # }
+
+        # if config_dict.get('pruning', False):
+        #     rknn_config_args['model_pruning'] = True
+
+        # # Quantization setup
+        # quant_config = config_dict.get('quantization', {})
+        # if quant_config.get('enabled', False):
+        #     rknn_config_args['quantized_dtype'] = quant_config['dtype']
+
+        #     # # === [修改点] 加载混合量化配置 JSON 为字典 ===
+        #     # hybrid_conf_path = config_dict.get('quantization', {}).get('hybrid_config_path')
+        #     # if hybrid_conf_path and os.path.exists(hybrid_conf_path):
+        #     #     logger.info(f"⚡ Hybrid Quantization Enabled! Loading config from: {hybrid_conf_path}")
+        #     #     try:
+        #     #         import json
+        #     #         with open(hybrid_conf_path, 'r') as f:
+        #     #             quant_config_dict = json.load(f)
+
+        #     #         # 这里的参数名根据 SDK 版本可能不同，Toolkit2 常用 'quantization_config' 或直接合并
+        #     #         # 通常 safe 的做法是直接传给 config
+        #     #         rknn_config_args['quantization_config'] = quant_config_dict
+        #     #     except Exception as e:
+        #     #         logger.error(f"Failed to load hybrid config: {e}")
+        #     # # ==========================================
+
+        # logger.debug(f"Config Args: {rknn_config_args}")
+        # self.rknn.config(**rknn_config_args)
+        # logger.info("-----------------------\n")
+
+        # 1. Config (Call the new method)
+        logger.info("--> (1/5). Configuring RKNN...")
+        self.config(config_dict, custom_string)
         logger.info("-----------------------\n")
 
         # 2. Load
         logger.info(f"--> (2/5). Loading ONNX: {onnx_path}")
-        # Parse input shapes [[1,80,50]] -> [[1,80,50]] (already list of lists)
-        load_ret = self.rknn.load_onnx(model=onnx_path, inputs=None, input_size_list=input_shapes)
-        if load_ret != 0:
-            logger.error("Load ONNX failed!")
+        if not self.load_onnx(onnx_path, input_shapes):
             return False
         logger.info("-----------------------\n")
+        # logger.info(f"--> (2/5). Loading ONNX: {onnx_path}")
+        # # Parse input shapes [[1,80,50]] -> [[1,80,50]] (already list of lists)
+        # load_ret = self.rknn.load_onnx(model=onnx_path, inputs=None, input_size_list=input_shapes)
+        # if load_ret != 0:
+        #     logger.error("Load ONNX failed!")
+        #     return False
+        # logger.info("-----------------------\n")
 
         # 3. Build
         logger.info("--> (3/5). Building RKNN Model...")
@@ -104,11 +161,15 @@ class RKNNAdapter:
 
         # 4. Export
         logger.info(f"--> (4/5). Exporting to: {output_path}")
-        export_ret = self.rknn.export_rknn(output_path)
-        if export_ret != 0:
-            logger.error("Export RKNN failed!")
+        if not self.export(output_path):
             return False
         logger.info("-----------------------\n")
+        # logger.info(f"--> (4/5). Exporting to: {output_path}")
+        # export_ret = self.rknn.export_rknn(output_path)
+        # if export_ret != 0:
+        #     logger.error("Export RKNN failed!")
+        #     return False
+        # logger.info("-----------------------\n")
 
         # 5. Evaluate (Memory)
         if config_dict.get('eval_memory', False):
@@ -126,123 +187,123 @@ class RKNNAdapter:
         # self.rknn.release()
         return True
 
-    def generate_quant_config(self, analysis_report_path, output_config_path, auto_threshold=None):
-        """
-        Parses the error_analysis.txt and generates a hybrid quantization config.
+    # def generate_quant_config(self, analysis_report_path, output_config_path, auto_threshold=None):
+    #     """
+    #     Parses the error_analysis.txt and generates a hybrid quantization config.
 
-        Args:
-            analysis_report_path (str): Path to the RKNN accuracy analysis txt.
-            output_config_path (str): Path where the JSON config will be saved.
-            auto_threshold (float, optional):
-                If provided (e.g., 0.99), layers with single-layer cosine similarity
-                below this value will be set to 'float16'.
-                If None, all layers are set to 'int8' for manual editing.
-        """
+    #     Args:
+    #         analysis_report_path (str): Path to the RKNN accuracy analysis txt.
+    #         output_config_path (str): Path where the JSON config will be saved.
+    #         auto_threshold (float, optional):
+    #             If provided (e.g., 0.99), layers with single-layer cosine similarity
+    #             below this value will be set to 'float16'.
+    #             If None, all layers are set to 'int8' for manual editing.
+    #     """
 
-        # Preparation -- 1. Echo welcome info
-        logger.info(f"📝 Generating quantization config template from analysis report...")
+    #     # Preparation -- 1. Echo welcome info
+    #     logger.info(f"📝 Generating quantization config template from analysis report...")
 
-        # Preparation -- 2. Check report existence
-        if not os.path.exists(analysis_report_path):
-            logger.error(f"Analysis report not found at {analysis_report_path}")
-            return False
+    #     # Preparation -- 2. Check report existence
+    #     if not os.path.exists(analysis_report_path):
+    #         logger.error(f"Analysis report not found at {analysis_report_path}")
+    #         return False
 
-        # Preparation -- 3. Determine hybrid-quantization mode (Manual or Auto)
-        use_auto_mode = auto_threshold is not None
-        if use_auto_mode:
-            logger.info(f"   Mode: AUTO (Threshold: {auto_threshold})")
-        else:
-            logger.info(f"   Mode: MANUAL template generation")
+    #     # Preparation -- 3. Determine hybrid-quantization mode (Manual or Auto)
+    #     use_auto_mode = auto_threshold is not None
+    #     if use_auto_mode:
+    #         logger.info(f"   Mode: AUTO (Threshold: {auto_threshold})")
+    #     else:
+    #         logger.info(f"   Mode: MANUAL template generation")
 
-        # Processing -- 4. Define data structures
-        layer_configs = {}
-        # Regex to capture: [Type] LayerName ... EntireCos | EntireEuc SingleCos ...
-        # Based on log: [Reshape] cached_conv1_0_rs  1.00000 | 0.0  0.99000 | 0.0
-        # We look for the pattern and specifically the 3rd number (Single Cosine).
+    #     # Processing -- 4. Define data structures
+    #     layer_configs = {}
+    #     # Regex to capture: [Type] LayerName ... EntireCos | EntireEuc SingleCos ...
+    #     # Based on log: [Reshape] cached_conv1_0_rs  1.00000 | 0.0  0.99000 | 0.0
+    #     # We look for the pattern and specifically the 3rd number (Single Cosine).
 
-        # Pattern explanation:
-        # ^\[.*?\]\s+   : Start with [Type] and spaces
-        # (\S+)         : Capture Group 1: Layer Name (non-whitespace)
-        # \s+           : Spaces
-        # [\d\.]+\s+\|\s+[\d\.]+ : Skip Entire Cos | Entire Euc
-        # \s+           : Spaces
-        # ([\d\.]+)     : Capture Group 2: Single Cosine Score
-        line_pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
+    #     # Pattern explanation:
+    #     # ^\[.*?\]\s+   : Start with [Type] and spaces
+    #     # (\S+)         : Capture Group 1: Layer Name (non-whitespace)
+    #     # \s+           : Spaces
+    #     # [\d\.]+\s+\|\s+[\d\.]+ : Skip Entire Cos | Entire Euc
+    #     # \s+           : Spaces
+    #     # ([\d\.]+)     : Capture Group 2: Single Cosine Score
+    #     line_pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
 
-        # Processing -- 4. Parse the report
-        try:
-            with open(analysis_report_path, 'r') as f:
-                for line in f:
-                    # Logic -- a. Strip line
-                    line = line.strip()
+    #     # Processing -- 4. Parse the report
+    #     try:
+    #         with open(analysis_report_path, 'r') as f:
+    #             for line in f:
+    #                 # Logic -- a. Strip line
+    #                 line = line.strip()
 
-                    # Logic -- b. Skip non-layer lines
-                    if  not line or \
-                        line.startswith('#') or \
-                        line.startswith('-') or \
-                        "layer_name" in line:
-                        continue
+    #                 # Logic -- b. Skip non-layer lines
+    #                 if  not line or \
+    #                     line.startswith('#') or \
+    #                     line.startswith('-') or \
+    #                     "layer_name" in line:
+    #                     continue
 
-                    # Logic -- c. Extract layer name
-                    # 匹配: [Conv] 7206-rs ...
-                    # 提取 [] 后面的第一个单词作为层名
-                    match = line_pattern.match(line)
+    #                 # Logic -- c. Extract layer name
+    #                 # 匹配: [Conv] 7206-rs ...
+    #                 # 提取 [] 后面的第一个单词作为层名
+    #                 match = line_pattern.match(line)
 
-                    # Logic -- d. Default to int8 for all layers found
-                    if match:
-                        layer_name = match.group(1)
-                        single_cosine_str = match.group(2)
+    #                 # Logic -- d. Default to int8 for all layers found
+    #                 if match:
+    #                     layer_name = match.group(1)
+    #                     single_cosine_str = match.group(2)
 
-                        # Logic -- e. Determine cosine score
-                        try:
-                            single_cosine = float(single_cosine_str)
-                        except ValueError:
-                            logger.warning(
-                                f"   Could not parse cosine score for layer {layer_name}, skipping...")
-                            single_cosine = 1.0  # Default to safe value
-                            continue
+    #                     # Logic -- e. Determine cosine score
+    #                     try:
+    #                         single_cosine = float(single_cosine_str)
+    #                     except ValueError:
+    #                         logger.warning(
+    #                             f"   Could not parse cosine score for layer {layer_name}, skipping...")
+    #                         single_cosine = 1.0  # Default to safe value
+    #                         continue
 
-                        # Logic -- f. Decide layer dtype based on mode
-                        if use_auto_mode:
-                            # Auto Mode: If score is bad, use float16. Otherwise keep int8 defaults (or empty)
-                            # To be safe, we only write the overridden layers to the config.
-                            if single_cosine < auto_threshold:
-                                logger.debug(
-                                    f"   📉 Layer {layer_name} score {single_cosine:.4f} < {auto_threshold}. Set to float16."
-                                )
-                                layer_configs[layer_name] = "float16"
-                            else:
-                                # For auto mode, we usually don't need to explicitly set int8
-                                # unless we want to lock it. RKNN defaults to int8.
-                                # Let's skip writing good layers to keep config clean,
-                                # or write them as int8 if strict control is needed.
-                                pass
-                        else:
-                            # Manual Mode: Dump everything as int8 so user can see and edit.
-                            layer_configs[layer_name] = "int8"
+    #                     # Logic -- f. Decide layer dtype based on mode
+    #                     if use_auto_mode:
+    #                         # Auto Mode: If score is bad, use float16. Otherwise keep int8 defaults (or empty)
+    #                         # To be safe, we only write the overridden layers to the config.
+    #                         if single_cosine < auto_threshold:
+    #                             logger.debug(
+    #                                 f"   📉 Layer {layer_name} score {single_cosine:.4f} < {auto_threshold}. Set to float16."
+    #                             )
+    #                             layer_configs[layer_name] = "float16"
+    #                         else:
+    #                             # For auto mode, we usually don't need to explicitly set int8
+    #                             # unless we want to lock it. RKNN defaults to int8.
+    #                             # Let's skip writing good layers to keep config clean,
+    #                             # or write them as int8 if strict control is needed.
+    #                             pass
+    #                     else:
+    #                         # Manual Mode: Dump everything as int8 so user can see and edit.
+    #                         layer_configs[layer_name] = "int8"
 
-            # If Auto mode found no bad layers, but the global score was low,
-            # it might be an accumulation error.
-            if use_auto_mode and not layer_configs:
-                logger.warning(
-                    "   [Auto] No single layer dropped below threshold. Problem might be cumulative.")
+    #         # If Auto mode found no bad layers, but the global score was low,
+    #         # it might be an accumulation error.
+    #         if use_auto_mode and not layer_configs:
+    #             logger.warning(
+    #                 "   [Auto] No single layer dropped below threshold. Problem might be cumulative.")
 
-            # Toolkit2 的混合量化配置通常是一个字典，键是层名，值是精度
-            # 有时需要包裹在 'override_layer_configs' 或直接作为 config
-            # 根据经验，Toolkit2 接受直接的层名映射，或者需要查阅具体版本的 manual
-            # 这里我们生成最通用的 {layer: dtype} 格式
+    #         # Toolkit2 的混合量化配置通常是一个字典，键是层名，值是精度
+    #         # 有时需要包裹在 'override_layer_configs' 或直接作为 config
+    #         # 根据经验，Toolkit2 接受直接的层名映射，或者需要查阅具体版本的 manual
+    #         # 这里我们生成最通用的 {layer: dtype} 格式
 
-            # Logic -- 6. Write to JSON
-            with open(output_config_path, 'w') as f:
-                json.dump(layer_configs, f, indent=4)
+    #         # Logic -- 6. Write to JSON
+    #         with open(output_config_path, 'w') as f:
+    #             json.dump(layer_configs, f, indent=4)
 
-            # Logic -- 7. Return success
-            return True
-        except Exception as e:
-            logger.error(f"Failed to generate config from report: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
+    #         # Logic -- 7. Return success
+    #         return True
+    #     except Exception as e:
+    #         logger.error(f"Failed to generate config from report: {e}")
+    #         import traceback
+    #         logger.error(traceback.format_exc())
+    #         return False
 
     def run_deep_analysis(self, dataset_path, output_dir):
         """
@@ -301,3 +362,125 @@ class RKNNAdapter:
         """Explicitly release RKNN resources."""
         if hasattr(self, 'rknn') and self.rknn:
             self.rknn.release()
+
+    def hybrid_step1(self, dataset, proposal=False):
+        """
+        Wrapper for hybrid_quantization_step1.
+        Generates .model, .data, and .quantization.cfg files.
+        """
+        logger.info("--> [Hybrid] Step 1: Generating intermediate files...")
+        # rknn_batch_size=1 is required for this step usually
+        ret = self.rknn.hybrid_quantization_step1(
+            dataset=dataset,
+            rknn_batch_size=1,
+            proposal=proposal
+        )
+        return ret == 0
+
+    def hybrid_step2(self, model_inp, data_inp, cfg_inp):
+        """
+        Wrapper for hybrid_quantization_step2.
+        Generates the final quantized model in memory (needs export later? No, usually it saves to internal graph).
+        Actually per SDK, this builds the model. We still need to call export_rknn afterwards?
+        Wait, SDK says it generates "RKNN model".
+        Usually standard flow is: step2 -> export_rknn.
+        """
+        logger.info("--> [Hybrid] Step 2: Building hybrid model...")
+        ret = self.rknn.hybrid_quantization_step2(
+            model_input=model_inp,
+            data_input=data_inp,
+            model_quantization_cfg=cfg_inp
+        )
+        return ret == 0
+
+    def apply_hybrid_patch(self, cfg_path, analysis_path, threshold=0.99):
+        """
+        Reads the .quantization.cfg file generated by Step 1,
+        Parses the error_analysis.txt to find layers with accuracy < threshold,
+        Modifies the .cfg file to set those layers to 'float16'.
+        """
+        import re
+
+        logger.info(f"🔧 Patching quantization config based on analysis (Threshold: {threshold})...")
+
+        if not os.path.exists(cfg_path) or not os.path.exists(analysis_path):
+            logger.error("Missing config file or analysis report.")
+            return False
+
+        # 1. Parse Analysis Report to find bad layers
+        bad_layers = set()
+        # Matches: [Type] LayerName ... SingleCos
+        # Log format: [Conv] 123_rs ... 0.999 ... 0.850
+        # We need a robust regex similar to what we discussed
+        pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
+
+        with open(analysis_path, 'r') as f:
+            for line in f:
+                match = pattern.match(line.strip())
+                if match:
+                    layer_name = match.group(1)
+                    try:
+                        score = float(match.group(2))
+                        if score < threshold:
+                            bad_layers.add(layer_name)
+                            logger.debug(f"   📉 Found sensitive layer: {layer_name} (Score: {score:.4f})")
+                    except:
+                        pass
+
+        if not bad_layers:
+            logger.info("   ✨ No layers found below threshold. No changes made.")
+            return True
+
+        # 2. Modify the .cfg file
+        # Format in cfg: layer_name: quantized_dtype
+        # e.g., "7206-rs: asymmetric_quantized-8"
+        new_lines = []
+        modified_count = 0
+
+        with open(cfg_path, 'r') as f:
+            lines = f.readlines()
+
+        for line in lines:
+            # Check if this line starts with a bad layer name
+            # Format usually: "layer_name: type"
+            parts = line.split(':')
+            if len(parts) >= 2:
+                # ------
+                # key = parts[0].strip()
+                # ------
+                # The original key might be quoted or not.
+                # strip() removes whitespace and potentially quotes if we are not careful,
+                # but split(':') is crude.
+
+                # Robust approach: check if any bad layer name appears in the line
+                # This handles "layer_name": dtype and layer_name: dtype
+
+                # Let's simplify:
+                # If we find a line starting with one of our bad layers (allowing for quotes), replace it.
+
+                current_key = parts[0].strip().strip('"').strip("'")
+                # ------
+
+                if current_key in bad_layers:
+                    # Force to float16
+
+                    # [CRITICAL FIX]:
+                    # 1. Detect original indentation (whitespace at start)
+                    # 2. Force double quotes around the key to handle '#' or other special chars
+                    # 3. Set value to float16
+
+                    indent = line[:len(line) - len(line.lstrip())]
+                    new_line = f'{indent}"{current_key}": float16\n'
+
+                    new_lines.append(new_line)
+                    modified_count += 1
+                    continue
+
+            new_lines.append(line)
+
+        # 3. Save back
+        with open(cfg_path, 'w') as f:
+            f.writelines(new_lines)
+
+        logger.info(f"   ✅ Patched {modified_count} layers to float16 in {cfg_path}")
+        return True
