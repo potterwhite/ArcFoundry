@@ -368,7 +368,7 @@ class RKNNAdapter:
         Wrapper for hybrid_quantization_step1.
         Generates .model, .data, and .quantization.cfg files.
         """
-        logger.info("--> [Hybrid] Step 1: Generating intermediate files...")
+        logger.info("--> [Hybrid] Step (1/2): Generating intermediate files...")
         # rknn_batch_size=1 is required for this step usually
         ret = self.rknn.hybrid_quantization_step1(
             dataset=dataset,
@@ -385,7 +385,7 @@ class RKNNAdapter:
         Wait, SDK says it generates "RKNN model".
         Usually standard flow is: step2 -> export_rknn.
         """
-        logger.info("--> [Hybrid] Step 2: Building hybrid model...")
+        logger.info("--> [Hybrid] Step (2/2): Building hybrid model...")
         ret = self.rknn.hybrid_quantization_step2(
             model_input=model_inp,
             data_input=data_inp,
@@ -399,15 +399,38 @@ class RKNNAdapter:
         Parses the error_analysis.txt to find layers with accuracy < threshold,
         Modifies the .cfg file to set those layers to 'float16'.
         """
-        import re
 
+        # Preparation -- 1. Echo welcome info
         logger.info(f"🔧 Patching quantization config based on analysis (Threshold: {threshold})...")
 
-        if not os.path.exists(cfg_path) or not os.path.exists(analysis_path):
-            logger.error("Missing config file or analysis report.")
+        # Preparation -- 2. Check config file existence
+        if not os.path.exists(cfg_path) :
+            logger.error("Missing config file.")
             return False
+        else:
+            logger.info(f"   ✅[FOUND] {cfg_path}")
 
-        # 1. Parse Analysis Report to find bad layers
+        # Preparation -- 3. Check analysis report existence
+        if not os.path.exists(analysis_path):
+            logger.error("Missing analysis report.")
+            return False
+        else:
+            logger.info(f"   ✅[FOUND] {analysis_path}")
+
+        # Preparation -- 4. Define ignored types
+        # [Blacklist] These layers are structural layers, RKNN prohibits users from modifying their dtype
+        # Even if their scores are low, they cannot be moved, otherwise Step 2 will report an error
+        IGNORED_TYPES = {
+            'Input', 'Output', 'DataConvert',
+            'Reshape', 'Transpose', 'Permute', 'Flatten',
+            'Concat', 'Split', 'Slice', 'Gather', 'Resize', 'Pad', 'Clip',
+            'Softmax', 'Sigmoid' # 某些版本的 RKNN 对激活函数层也有限制，建议先加上
+        }
+
+        # Preparation -- 5. Initialize bad layer account
+        bad_layer_account = 0
+
+        # Processing -- 1. Parse Analysis Report to find bad layers
         bad_layers = set()
         # Matches: [Type] LayerName ... SingleCos
         # Log format: [Conv] 123_rs ... 0.999 ... 0.850
@@ -418,12 +441,18 @@ class RKNNAdapter:
             for line in f:
                 match = pattern.match(line.strip())
                 if match:
-                    layer_name = match.group(1)
+                    layer_type = match.group(1)
+                    layer_name = match.group(2)
+
+                    if layer_type in IGNORED_TYPES:
+                        continue
+
                     try:
-                        score = float(match.group(2))
+                        score = float(match.group(3))
                         if score < threshold:
                             bad_layers.add(layer_name)
-                            logger.debug(f"   📉 Found sensitive layer: {layer_name} (Score: {score:.4f})")
+                            bad_layer_account += 1
+                            logger.debug(f"   📉 Found sensitive layer - {bad_layer_account}: {layer_name} {layer_type} (Score: {score:.4f})")
                     except:
                         pass
 
@@ -431,7 +460,7 @@ class RKNNAdapter:
             logger.info("   ✨ No layers found below threshold. No changes made.")
             return True
 
-        # 2. Modify the .cfg file
+        # Processing -- 2. Modify the .cfg file
         # Format in cfg: layer_name: quantized_dtype
         # e.g., "7206-rs: asymmetric_quantized-8"
         new_lines = []
