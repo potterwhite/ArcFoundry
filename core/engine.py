@@ -241,15 +241,15 @@ class PipelineEngine:
     #     logger.info(f"🚑 Entering Accuracy Recovery Workflow for {model_name}...")
 
     #     # Processing -- 3. User Selects whether to do Hybrid Quantization
-    #     print(f"\n[INTERVENTION] Accuracy is below threshold. Analysis saved to: {analysis_dir}")
+    #     logger.info(f"\n[INTERVENTION] Accuracy is below threshold. Analysis saved to: {analysis_dir}")
     #     choice = input(f"   >>> Enable Hybrid Quantization (FP16 mix)? [y/n]: ").strip().lower()
     #     if choice != 'y':
     #         return
 
     #     # Processing -- 4. User Selects Strategy(Auto / Manual)
-    #     print("\n   [SELECT STRATEGY]")
-    #     print("   (a) Auto-Tune: Automatically set layers < threshold to float16.")
-    #     print("   (m) Manual: Generate template, you edit JSON manually.")
+    #     logger.info("\n   [SELECT STRATEGY]")
+    #     logger.info("   (a) Auto-Tune: Automatically set layers < threshold to float16.")
+    #     logger.info("   (m) Manual: Generate template, you edit JSON manually.")
     #     mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
 
     #     # Processing -- 5. Get Auto Threshold if needed
@@ -277,7 +277,7 @@ class PipelineEngine:
     #             temp_adapter.release()
 
     #             if success:
-    #                 print(f"   [CREATED] Config template: {quant_config_path}")
+    #                 logger.info(f"   [CREATED] Config template: {quant_config_path}")
     #             else:
     #                 logger.error("   Failed to create template. Aborting.")
     #                 return
@@ -286,15 +286,15 @@ class PipelineEngine:
     #             logger.error("   Error analysis report missing. Cannot generate template.")
     #             return
     #     else:
-    #         print(f"   [FOUND] {quant_config_path}")
+    #         logger.info(f"   [FOUND] {quant_config_path}")
 
     #     # Processing -- 5. Final Gate before real doing hybrid quantization
     #     if auto_threshold is None:
-    #         print(f"\n   !!! ACTION: Please edit {quant_config_path} now.")
-    #         print(f"   Change 'int8' to 'float16' for sensitive layers.")
+    #         logger.info(f"\n   !!! ACTION: Please edit {quant_config_path} now.")
+    #         logger.info(f"   Change 'int8' to 'float16' for sensitive layers.")
     #         input("   >>> Press [ENTER] when you are ready to re-build...")
     #     else:
-    #         print(f"   [AUTO] Applied settings for layers < {auto_threshold}. Re-building immediately...")
+    #         logger.info(f"   [AUTO] Applied settings for layers < {auto_threshold}. Re-building immediately...")
 
     #     # Processing -- 6. Determine final build config
     #     hybrid_build_config = copy.deepcopy(base_build_config)
@@ -334,10 +334,12 @@ class PipelineEngine:
         error_report = os.path.join(analysis_dir, "error_analysis.txt")
 
         # 1. Ask User
-        print(f"\n[INTERVENTION] Accuracy is below threshold.")
+        logger.info(f"\n[INTERVENTION] Accuracy is below threshold.")
         choice = input(f"   >>> Start Hybrid Quantization Step 1? [y/n]: ").strip().lower()
-        if choice != 'y':
+        if choice not in ('', 'y', 'yes'):
             return
+        else:
+            logger.info(f"\n\n   🔄 Starting Hybrid Quantization Step 1...")
 
         # 2. Step 1: Generate Intermediate Files
         # We need a fresh adapter
@@ -357,14 +359,14 @@ class PipelineEngine:
         logger.info(f"   ✨ Step 1 Complete. Config generated at: ./{cfg_file}")
 
         # 3. Modify the Config (Auto vs Manual)
-        print("\n   [SELECT STRATEGY]")
-        print("   (a) Auto-Patch: Automatically set layers < threshold to float16.")
-        print("   (m) Manual: You edit the .cfg file yourself.")
+        logger.info("\n   [SELECT STRATEGY]")
+        logger.info("   (a) Auto-Patch: Automatically set layers < threshold to float16.")
+        logger.info("   (m) Manual: You edit the .cfg file yourself.")
         mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
 
         if mode == 'm':
-            print(f"\n   !!! ACTION: Please edit ./{cfg_file} now.")
-            print(f"   Find sensitive layers and change 'asymmetric_quantized-8' to 'float16'.")
+            logger.info(f"\n   !!! ACTION: Please edit ./{cfg_file} now.")
+            logger.info(f"   Find sensitive layers and change 'asymmetric_quantized-8' to 'float16'.")
             input("   >>> Press [ENTER] when you are ready for Step 2...")
         else:
             # Auto Mode
