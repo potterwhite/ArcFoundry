@@ -24,6 +24,7 @@ from rknn.api import RKNN
 from core.utils import logger
 from typing import List, Dict, Any
 
+
 class ModelComparator:
     """
     负责对比 ONNX 原始模型与 RKNN 模拟器的推理精度。
@@ -52,10 +53,8 @@ class ModelComparator:
         # 注意：这里我们继承主流程的 build 配置（如量化参数），确保模拟的一致性
         # 但我们强制 do_quantization=False 来验证 FP16 基线，或者根据 build_config 决定
         # V1.1 阶段我们先验证 FP16 连通性
-        ret = self.rknn.build(
-            do_quantization=build_config.get('quantization', {}).get('enabled', False),
-            dataset=build_config.get('quantization', {}).get('dataset', None)
-        )
+        ret = self.rknn.build(do_quantization=build_config.get('quantization', {}).get('enabled', False),
+                              dataset=build_config.get('quantization', {}).get('dataset', None))
         if ret != 0:
             raise RuntimeError("Simulator: Build failed!")
 

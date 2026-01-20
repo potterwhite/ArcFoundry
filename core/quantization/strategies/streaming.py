@@ -29,6 +29,7 @@ from core.utils import logger, ensure_dir
 from core.dsp.audio_features import SherpaFeatureExtractor
 from . import register_strategy
 
+
 @register_strategy("streaming_audio")
 class StreamingAudioStrategy:
     """
@@ -83,7 +84,7 @@ class StreamingAudioStrategy:
         # 4. Processing Loop
         generated_lines = []
         CHUNK_SIZE = 39  # Fixed chunk size for Sherpa
-        CHUNK_SHIFT = 19 # Fixed stride for Sherpa
+        CHUNK_SHIFT = 19  # Fixed stride for Sherpa
 
         for audio_path in tqdm(audio_paths, desc="Calibrating (Streaming)"):
             try:
@@ -103,7 +104,7 @@ class StreamingAudioStrategy:
                     step_counter += 1
 
                     # Prepare Input Feed
-                    feature_chunk = np.expand_dims(all_features[start:end, :], axis=0) # [1, 39, 80]
+                    feature_chunk = np.expand_dims(all_features[start:end, :], axis=0)  # [1, 39, 80]
                     feed_dict = {inputs_meta[0].name: feature_chunk}
                     feed_dict.update(current_states)
 

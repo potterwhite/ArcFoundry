@@ -22,6 +22,7 @@ import numpy as np
 import librosa
 import logging
 
+
 class SherpaFeatureExtractor:
     """
     专门用于复刻 Sherpa-Onnx C++ 底层特征提取流程的 DSP 模块。
@@ -60,9 +61,7 @@ class SherpaFeatureExtractor:
 
             # 4. Pre-emphasis (预加重) - 关键步骤
             if self.preemph_coeff > 0.0:
-                waveform = librosa.effects.preemphasis(
-                    waveform, coef=self.preemph_coeff
-                )
+                waveform = librosa.effects.preemphasis(waveform, coef=self.preemph_coeff)
 
             # 5. Mel Spectrogram
             mel = librosa.feature.melspectrogram(

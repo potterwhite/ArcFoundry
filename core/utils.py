@@ -22,6 +22,7 @@ import logging
 import sys
 import os
 
+
 # 1. Define the Custom Formatter
 class SmartNewlineFormatter(logging.Formatter):
     """
@@ -29,6 +30,7 @@ class SmartNewlineFormatter(logging.Formatter):
     and moves them to the very beginning of the final output string,
     before the log prefix (timestamp, level, etc.).
     """
+
     def format(self, record):
         # Ensure message is a string
         original_msg = str(record.msg)
@@ -56,12 +58,15 @@ class SmartNewlineFormatter(logging.Formatter):
         # Default behavior for messages without leading newlines
         return super().format(record)
 
+
 # Global logger instance
 logger = logging.getLogger("ArcFoundry")
+
 
 def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
 
 def get_sdk_version():
     """
@@ -81,6 +86,7 @@ def get_sdk_version():
         pass
     return "unknown"
 
+
 def setup_logging(verbose=False):
     """
     Configure logging with version info and verbosity control.
@@ -95,10 +101,8 @@ def setup_logging(verbose=False):
     #     fmt=f"[ArcFoundry v{ver}] %(asctime)s [%(levelname)s] %(message)s",
     #     datefmt="%H:%M:%S"
     # )
-    formatter = SmartNewlineFormatter(
-        fmt=f"[ArcFoundry v{ver}] %(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S"
-    )
+    formatter = SmartNewlineFormatter(fmt=f"[ArcFoundry v{ver}] %(asctime)s [%(levelname)s] %(message)s",
+                                      datefmt="%H:%M:%S")
 
     # Setup Root Logger
     root_logger = logging.getLogger()
@@ -115,6 +119,7 @@ def setup_logging(verbose=False):
     logging.getLogger("onnxruntime").setLevel(logging.WARNING)
 
     return logging.getLogger("ArcFoundry")
+
 
 # Initialize a default logger instance for module-level usage
 logger = setup_logging(verbose=False)

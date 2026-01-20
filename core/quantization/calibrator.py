@@ -29,6 +29,7 @@ from core.quantization.strategies import get_strategy_class
 import core.quantization.strategies.streaming
 # Future: import core.quantization.strategies.vision
 
+
 class CalibrationGenerator:
     """
     Facade class for generating calibration datasets.

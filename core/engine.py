@@ -384,9 +384,9 @@ class PipelineEngine:
         if adapter.hybrid_step2(model_file, data_file, cfg_file):
             # 5. Export
             if adapter.export(output_path):
-                 logger.info(f"✅ Hybrid Model successfully saved to {output_path}")
+                logger.info(f"✅ Hybrid Model successfully saved to {output_path}")
             else:
-                 logger.error("❌ Export failed after hybrid build.")
+                logger.error("❌ Export failed after hybrid build.")
         else:
             logger.error(f"❌ Hybrid Step 2 failed.")
 

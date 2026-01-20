@@ -22,6 +22,7 @@
 
 _STRATEGY_REGISTRY = {}
 
+
 def register_strategy(name):
     """
     Decorator to register a calibration strategy class.
@@ -29,10 +30,13 @@ def register_strategy(name):
     Args:
         name (str): The unique identifier for the strategy (e.g., 'streaming_audio').
     """
+
     def decorator(cls):
         _STRATEGY_REGISTRY[name] = cls
         return cls
+
     return decorator
+
 
 def get_strategy_class(name):
     """

@@ -24,6 +24,7 @@ from core.utils import setup_logging, logger
 from core.engine import PipelineEngine
 import time
 
+
 def main():
     start_time = time.perf_counter()
     parser = argparse.ArgumentParser(description="ArcFoundry Core Engine V1.0")
@@ -46,6 +47,7 @@ def main():
     elapsed = end_time - start_time
     minutes, seconds = divmod(elapsed, 60)
     logger.info(f"Total execution time: {int(minutes)} minutes and {seconds:.2f} seconds")
+
 
 if __name__ == "__main__":
     main()
