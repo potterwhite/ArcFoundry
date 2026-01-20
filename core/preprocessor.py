@@ -35,11 +35,11 @@ class Preprocessor:
     def __init__(self, config):
         self.cfg = config
 
-    def process(self, onnx_path, output_path, json_strategies):
+    def preprocess(self, onnx_path, output_path, json_strategies):
         """
         Applies a series of preprocessing strategies to the ONNX model.
         """
-        # Preparation -- Define Variables
+        # Preparation -- 1. Define Variables
         current_model_path = onnx_path
         custom_string = None
         modified = False
@@ -49,7 +49,7 @@ class Preprocessor:
             logger.info("Strategy: Extracting Custom Metadata...")
             custom_string = self._extract_metadata(current_model_path)
 
-        # Preparation -- Existing Check
+        # Preparation -- 2. Existing Check
         if os.path.exists(output_path):
             try:
                 logger.info(f"[Cache Hit] Found existing file: {output_path}")
@@ -64,36 +64,37 @@ class Preprocessor:
                 except OSError:
                     pass
 
-        # Processing -- Load model for graph modification
+        # Preparation -- 3. Load model for graph modification
         try:
             model = onnx.load(current_model_path)
         except Exception as e:
             logger.error(f"Failed to load ONNX model: {e}")
             return None, None
 
-        # 2. Fix Dynamic Shape
+        # Processing -- 2. Fix Dynamic Shape
         if json_strategies.get('fix_dynamic_shape', False):
             logger.info("Strategy: Fixing Dynamic Shapes...")
             if self._fix_dynamic_shapes(model):
                 modified = True
 
-        # 3. Fix INT64 Type (Decoder specific)
+        # Processing -- 3. Fix INT64 Type (Decoder specific)
         if json_strategies.get('fix_int64_type', False):
             logger.info("Strategy: Fixing INT64 Types for inputs...")
             if self._fix_int64_type(model):
                 modified = True
 
-        # Save intermediate if modified
+        # Processing -- 4. Save intermediate if modified
         if modified:
             logger.debug(f"Saving intermediate fixed model to {output_path}")
             onnx.save(model, output_path)
             current_model_path = output_path
 
-        # 4. Simplify (onnxsim)
+        # Processing -- 5. Simplify (onnxsim)
         if json_strategies.get('simplify', False):
             logger.info("Strategy: Running ONNX Simplifier...")
             current_model_path = self._simplify(current_model_path, output_path)
 
+        # Finalization
         return current_model_path, custom_string
 
     def _fix_dynamic_shapes(self, model):

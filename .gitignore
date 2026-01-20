@@ -8,6 +8,8 @@ pictures/
 output/
 workspace/
 data/
+# temporary files
+*.swp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

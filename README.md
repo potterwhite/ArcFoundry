@@ -134,9 +134,10 @@ models:
 ### 5.1 自动预处理 (Auto Preprocessing)
 为了解决原始 ONNX 模型无法直接转换的问题，SDK 内置了以下策略开关：
 
-*   **`fix_dynamic_shape`**: 自动识别 ONNX 中的 `dim_param` (动态维度) 并将其固定为静态值（通常为 1），这是 NPU 推理的必要条件。
 *   **`extract_metadata`**: 针对 Sherpa 等将配置参数（如 Token 数量）隐藏在 ONNX Metadata 中的模型，SDK 会自动提取并通过 `custom_string` 注入 RKNN，确保推理库能正确加载模型。
+*   **`fix_dynamic_shape`**: 自动识别 ONNX 中的 `dim_param` (动态维度) 并将其固定为静态值（通常为 1），这是 NPU 推理的必要条件。
 *   **`fix_int64_type`**: 针对某些导出工具导致的输入节点数据类型错误（例如本应是 INT64 却变成了未定义），在转换前强制修复。
+*   **`onnxsim`**: 图优化。
 
 ## 6. 自动化精度验证 (Auto-Verification)
 

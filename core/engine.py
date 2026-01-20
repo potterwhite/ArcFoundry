@@ -44,11 +44,11 @@ class PipelineEngine:
         self.cfg = self._load_config(config_path)
 
         # Paths
-        self.workspace = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
-        self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        self.json_workspace = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
+        self.json_output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
 
-        ensure_dir(self.workspace)
-        ensure_dir(self.output_dir)
+        ensure_dir(self.json_workspace)
+        ensure_dir(self.json_output_dir)
 
     # --------------------------------------------------------------------------
     # Assist Methods
@@ -65,8 +65,8 @@ class PipelineEngine:
                 # only encoder models use full quantization
                 try:
                     # === [Optimization] Check if dataset list already exists ===
-                    # 假设生成的文件名为 calibration_list.txt (这取决于 Calibrator 的实现，通常是固定的)
-                    expected_ds_path = os.path.join(self.workspace, "calibration_list.txt")
+                    # The name of the calibration dataset file is fixed to "calibration_list.txt"
+                    expected_ds_path = os.path.join(self.json_workspace, "calibration_list.txt")
 
                     if os.path.exists(expected_ds_path):
                         logger.info(f"⏩ [SKIP] Found existing calibration dataset: {expected_ds_path}")
@@ -74,7 +74,7 @@ class PipelineEngine:
                     else:
                         # 只有不存在时才生成
                         calibrator = CalibrationGenerator(self.cfg)
-                        ds_path = calibrator.generate(onnx_path, self.workspace)
+                        ds_path = calibrator.generate(onnx_path, self.json_workspace)
                     # ===========================================================
 
                     if ds_path and os.path.exists(ds_path):
@@ -120,7 +120,7 @@ class PipelineEngine:
             json_model_path = json_model["path"]  # YAML里指定的目标本地路径
             json_model_url = json_model.get("url", None)  # 既然是可选的，就用 get
             json_strategies = json_model.get("preprocess", {})
-            rknn_out_path = os.path.join(self.output_dir, f"{json_model_name}.rknn")
+            rknn_output_path = os.path.join(self.json_output_dir, f"{json_model_name}.rknn")
             json_input_shapes = json_model.get('input_shapes', None)
 
             # 2. Preparation -- Echo helper info
@@ -133,14 +133,13 @@ class PipelineEngine:
 
             # 4. Preparation -- Define string of ONNX model path
             processed_onnx_name = f"{json_model_name}.processed.onnx"
-            processed_onnx_path = os.path.join(self.workspace, processed_onnx_name)
+            processed_onnx_path = os.path.join(self.json_workspace, processed_onnx_name)
             logger.debug(f"ONNX model path: {processed_onnx_path}")
 
             # 5. Processing -- Preprocessing Stage
-            #    doing so many operations with the original model
-            #    and return the processed onnx model path back
+            #    To do many operations with the original model and return the processed onnx model path back
             logger.info(f"\n===== I. Preprocessing =====")
-            processed_onnx_path, custom_string = module_preprocessor.process(
+            processed_onnx_path, custom_string = module_preprocessor.preprocess(
                 json_model_path,
                 processed_onnx_path,
                 json_strategies,
@@ -157,7 +156,7 @@ class PipelineEngine:
             # 4. 执行标准转换与评估 (Level 2)
             logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
             score = self._convert_and_evaluate(json_target_platform, json_model_name, processed_onnx_path,
-                                               rknn_out_path, json_input_shapes, final_json_build,
+                                               rknn_output_path, json_input_shapes, final_json_build,
                                                custom_string, json_model)
 
             # 5. 决策点：如果精度不够，进入恢复流程 (Level 3)
@@ -166,7 +165,7 @@ class PipelineEngine:
             is_quant = final_json_build.get('quantization', {}).get('enabled', False)
             if is_quant and score < 0.99:
                 self._recover_precision(json_target_platform, json_model_name, processed_onnx_path,
-                                        rknn_out_path, json_input_shapes, final_json_build, custom_string)
+                                        rknn_output_path, json_input_shapes, final_json_build, custom_string)
 
             logger.info(f"<<< Completed: {json_model_name} <<<\n")
             time.sleep(1)
@@ -185,7 +184,7 @@ class PipelineEngine:
         """
         # === [Fast-Forward] Check for existing analysis report ===
         # 如果精度分析报告已存在，说明之前跑过且失败了，直接跳过构建，强制触发混合量化修复
-        analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+        analysis_dir = os.path.join(self.json_output_dir, "analysis", model_name)
         existing_report = os.path.join(analysis_dir, "error_analysis.txt")
 
         # 只有当 RKNN 模型存在 且 分析报告也存在时，才跳过
@@ -213,7 +212,7 @@ class PipelineEngine:
             if is_quant and score < 0.99:
                 logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
                 dataset_path = build_config.get('quantization', {}).get('dataset')
-                analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+                analysis_dir = os.path.join(self.json_output_dir, "analysis", model_name)
                 adapter.run_deep_analysis(dataset_path, analysis_dir)
         else:
             logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
@@ -233,7 +232,7 @@ class PipelineEngine:
     #     此时之前的 adapter 已经释放，这里完全创建新的。
     #     """
     #     # Preparation -- 1. Paths
-    #     analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+    #     analysis_dir = os.path.join(self.json_output_dir, "analysis", model_name)
     #     error_analysis_path = os.path.join(analysis_dir, "error_analysis.txt")
     #     quant_config_path = os.path.join(analysis_dir, "hybrid_quant_config.json")
 
@@ -330,7 +329,7 @@ class PipelineEngine:
         model_file = f"{model_prefix}.model"
         data_file = f"{model_prefix}.data"
 
-        analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+        analysis_dir = os.path.join(self.json_output_dir, "analysis", model_name)
         error_report = os.path.join(analysis_dir, "error_analysis.txt")
 
         # 1. Ask User
