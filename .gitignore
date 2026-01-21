@@ -8,6 +8,14 @@ pictures/
 output/
 workspace/
 data/
+
+# RKNN Intermediate files
+*.quantization.cfg
+*.model
+*.data
+*.rknn_util_Config
+check.*.onnx
+
 # temporary files
 *.swp
 

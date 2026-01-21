@@ -25,12 +25,12 @@ from core.rknn_adapter import RKNNAdapter
 
 class PrecisionRecoverer:
 
-    def __init__(self, global_config, output_dir):
+    def __init__(self, global_config):
         self.cfg = global_config
-        self.output_dir = output_dir
+        self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
 
     # --------------------------------------------------------------------------
-    # Level 3: 精度恢复工作流 (混合量化)
+    # Main Methods -- Precision Recovery Workflow
     # --------------------------------------------------------------------------
     def _recover_precision(self, target_plat, model_name, onnx_path, output_path, input_shapes,
                            base_build_config, custom_string):
@@ -46,9 +46,14 @@ class PrecisionRecoverer:
         model_prefix = os.path.splitext(onnx_basename)[0]
 
         # Predicted paths for generated files (in CWD)
-        cfg_file = f"{model_prefix}.quantization.cfg"
-        model_file = f"{model_prefix}.model"
-        data_file = f"{model_prefix}.data"
+        # === [MODIFIED] Force paths to be inside the temp directory ===
+        cfg_file = os.path.join(self.output_dir, f"{model_prefix}.quantization.cfg")
+        model_file = os.path.join(self.output_dir, f"{model_prefix}.model")
+        data_file = os.path.join(self.output_dir, f"{model_prefix}.data")
+        # ==============================================================
+        # cfg_file = f"{model_prefix}.quantization.cfg"
+        # model_file = f"{model_prefix}.model"
+        # data_file = f"{model_prefix}.data"
 
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
         error_report = os.path.join(analysis_dir, "error_analysis.txt")
@@ -114,90 +119,3 @@ class PrecisionRecoverer:
         adapter.release()
 
         return
-
-    # def _recover_precision(self, target_plat, model_name, onnx_path, output_path, input_shapes,
-    #                        base_build_config, custom_string):
-    #     """
-    #     独立的“救援”流程。包含：交互询问 -> 生成配置 -> 重新编译。
-    #     此时之前的 adapter 已经释放，这里完全创建新的。
-    #     """
-    #     # Preparation -- 1. Paths
-    #     analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
-    #     error_analysis_path = os.path.join(analysis_dir, "error_analysis.txt")
-    #     quant_config_path = os.path.join(analysis_dir, "hybrid_quant_config.json")
-
-    #     # Preparation -- 2. Echo welcome info
-    #     logger.info(f"🚑 Entering Accuracy Recovery Workflow for {model_name}...")
-
-    #     # Processing -- 3. User Selects whether to do Hybrid Quantization
-    #     logger.info(f"\n[INTERVENTION] Accuracy is below threshold. Analysis saved to: {analysis_dir}")
-    #     choice = input(f"   >>> Enable Hybrid Quantization (FP16 mix)? [y/n]: ").strip().lower()
-    #     if choice != 'y':
-    #         return
-
-    #     # Processing -- 4. User Selects Strategy(Auto / Manual)
-    #     logger.info("\n   [SELECT STRATEGY]")
-    #     logger.info("   (a) Auto-Tune: Automatically set layers < threshold to float16.")
-    #     logger.info("   (m) Manual: Generate template, you edit JSON manually.")
-    #     mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
-
-    #     # Processing -- 5. Get Auto Threshold if needed
-    #     auto_threshold = None
-    #     if mode == 'm':
-    #         # Manual Mode
-    #         pass  # auto_threshold remains None
-    #     else:
-    #         # Auto Mode
-    #         thresh_input = input("   >>> Enter min cosine score threshold (default 0.99): ").strip()
-    #         try:
-    #             auto_threshold = float(thresh_input) if thresh_input else 0.99
-    #         except ValueError:
-    #             logger.warning("Invalid number, using default 0.99")
-    #             auto_threshold = 0.99
-
-    #     # Processing -- 6. Preparing Hybrid Quantization Config
-    #     # 为了生成配置，我们需要一个临时的 adapter 实例
-    #     # 这是一个干净的实例，只为了 export_config，用完即扔
-    #     if not os.path.exists(quant_config_path):
-    #         if os.path.exists(error_analysis_path):
-    #             temp_adapter = RKNNAdapter(target_plat, verbose=False)
-    #             success = temp_adapter.generate_quant_config(error_analysis_path, quant_config_path,
-    #                                                          auto_threshold)
-    #             temp_adapter.release()
-
-    #             if success:
-    #                 logger.info(f"   [CREATED] Config template: {quant_config_path}")
-    #             else:
-    #                 logger.error("   Failed to create template. Aborting.")
-    #                 return
-
-    #         else:
-    #             logger.error("   Error analysis report missing. Cannot generate template.")
-    #             return
-    #     else:
-    #         logger.info(f"   [FOUND] {quant_config_path}")
-
-    #     # Processing -- 5. Final Gate before real doing hybrid quantization
-    #     if auto_threshold is None:
-    #         logger.info(f"\n   !!! ACTION: Please edit {quant_config_path} now.")
-    #         logger.info(f"   Change 'int8' to 'float16' for sensitive layers.")
-    #         input("   >>> Press [ENTER] when you are ready to re-build...")
-    #     else:
-    #         logger.info(f"   [AUTO] Applied settings for layers < {auto_threshold}. Re-building immediately...")
-
-    #     # Processing -- 6. Determine final build config
-    #     hybrid_build_config = copy.deepcopy(base_build_config)
-    #     hybrid_build_config['quantization']['hybrid_config_path'] = quant_config_path
-
-    #     # Processing -- 7. Do Hybrid Quantization Build
-    #     final_adapter = RKNNAdapter(target_plat, verbose=True)
-    #     ret = final_adapter.convert(onnx_path, output_path, input_shapes, hybrid_build_config, custom_string)
-
-    #     # Processing -- 8. Prompt final result
-    #     if ret:
-    #         logger.info(f"✅ Hybrid Model successfully saved to {output_path}")
-    #     else:
-    #         logger.error(f"❌ Hybrid Conversion failed.")
-
-    #     # Processing -- 9. Cleanup and exit
-    #     final_adapter.release()

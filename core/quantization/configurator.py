@@ -15,14 +15,14 @@ class QuantizationConfigurator:
     Decides IF quantization should be enabled and PREPARES the necessary resources.
     """
 
-    def __init__(self, global_config, workspace_dir):
+    def __init__(self, global_config):
         """
         Args:
             global_config (dict): The full loaded yaml configuration.
             workspace_dir (str): Path to the workspace directory.
         """
         self.cfg = global_config
-        self.workspace_dir = workspace_dir
+        self.workspace_dir = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
 
     def _timed_input(self, prompt, timeout=30, default='y'):
         """

@@ -29,9 +29,9 @@ from core.dsp.audio_features import SherpaFeatureExtractor
 
 class StandardConverter:
 
-    def __init__(self, global_config, output_dir):
+    def __init__(self, global_config):
         self.cfg = global_config
-        self.output_dir = output_dir
+        self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):

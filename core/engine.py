@@ -18,9 +18,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import glob
 import os
 import yaml
-from core.utils import logger, ensure_dir
+from core.utils import logger, ensure_dir, cleanup_garbage
 from core.preprocessor import Preprocessor
 # from core.rknn_adapter import RKNNAdapter
 from core.downloader import ModelDownloader
@@ -52,9 +53,9 @@ class PipelineEngine:
         ensure_dir(self.json_workspace)
         ensure_dir(self.json_output_dir)
 
-        self.quant_configurator = QuantizationConfigurator(self.cfg, self.json_workspace)
-        self.converter = StandardConverter(self.cfg, self.json_output_dir)
-        self.recoverer = PrecisionRecoverer(self.cfg, self.json_output_dir)
+        self.quant_configurator = QuantizationConfigurator(self.cfg)
+        self.converter = StandardConverter(self.cfg)
+        self.recoverer = PrecisionRecoverer(self.cfg, )
 
     # --------------------------------------------------------------------------
     # Assist Methods
@@ -167,4 +168,11 @@ class PipelineEngine:
         logger.info(f"\n=== Pipeline Completed: {success_count}/{len(json_models)} models successful ===")
         if FAILED_MODELS:
             logger.info(f"\nFailed Models: {FAILED_MODELS}\n")
+
+
+        # === [MODIFIED] Cleanup using utility function ===
+        cleanup_garbage()  # 默认清理当前目录下的垃圾
+
         logger.info("==============================================================")
+
+
