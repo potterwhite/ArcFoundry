@@ -22,6 +22,17 @@ class QuantizationConfigurator:
         self.cfg = global_config
         self.workspace_dir = workspace_dir
 
+    def _alert_fallback(self, reason):
+        """
+        Prints a loud, unmistakable warning box when quantization fails.
+        """
+        msg = [
+            "!" * 60, "!!! QUANTIZATION FALLBACK TRIGGERED !!!", "!" * 60, f"Reason : {reason}",
+            "Action : Switching logic to FP16 mode.",
+            "Notice : Output filename will be tagged with '_fp16.rknn'.", "!" * 60
+        ]
+        logger.warning("\n" + "\n".join(msg) + "\n")
+
     def _get_dataset_path(self, onnx_path):
         # Preparation -- 2. Define expected calibration dataset path
         # The name of the calibration dataset file is fixed to "calibration_list.txt"
@@ -69,20 +80,24 @@ class QuantizationConfigurator:
         try:
             ds_path = self._get_dataset_path(onnx_path)
 
-            # 打印一下拿到的路径是什么，方便调试
-            logger.debug(f"Calibration Generator returned: {ds_path}")
-
             if ds_path and os.path.exists(ds_path):
                 json_build_duplicate['quantization']['dataset'] = ds_path
+                logger.info(
+                    f"✅ Calibration dataset confirmed: {json_build_duplicate['quantization']['dataset']}")
             else:
-                logger.warning(f"⚠️ Dataset path is invalid: {ds_path}. Disabling quantization.")
+                # Case A: Generator returned None or file doesn't exist
+                reason = f"Dataset generator returned invalid path: {ds_path}"
+                self._alert_fallback(reason)
                 json_build_duplicate['quantization']['enabled'] = False
 
         except Exception as e:
-            logger.error(f"❌ Dataset Generation Crashing: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())  # 打印详细报错堆栈
+            # Case B: Generator crashed (e.g., config error, missing file)
+            # Print the stack trace for debugging, but don't crash the pipeline
+            logger.error(f"❌ Calibration Generator Crashed: {str(e)}")
+            # import traceback
+            # logger.error(traceback.format_exc())
 
+            self._alert_fallback("Calibration Generator crashed (see error above).")
             json_build_duplicate['quantization']['enabled'] = False
 
         # Debug: Log final quantization config
