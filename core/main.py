@@ -27,7 +27,7 @@ import time
 
 def main():
     start_time = time.perf_counter()
-    parser = argparse.ArgumentParser(description="ArcFoundry Core Engine V1.0")
+    parser = argparse.ArgumentParser(description="ArcFoundry Core Engine")
     parser.add_argument('-c', '--config', required=True, help="Path to YAML configuration file")
     args = parser.parse_args()
 

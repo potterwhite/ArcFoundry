@@ -53,26 +53,32 @@ class PipelineEngine:
     # --------------------------------------------------------------------------
     # Assist Methods
     # --------------------------------------------------------------------------
-    def _prepare_build_from_json(self, model_name, onnx_path):
+    def _prepare_quantization_config(self, model_name, onnx_path):
         """
            Keep main loop clean by extracting config preparation logic
         """
+
+        # Preparation -- 1. Duplicate build config for safety and modification
         json_build_duplicate = copy.deepcopy(self.cfg.get('build', {}))
         json_build_duplicate['quantization']['dataset'] = None
 
+        # Preparation -- 2. Define expected calibration dataset path
+        # The name of the calibration dataset file is fixed to "calibration_list.txt"
+        expected_ds_path = os.path.join(self.json_workspace, "calibration_list.txt")
+
+        # Processing -- 1. Handle Calibration Dataset Generation if needed
         if json_build_duplicate.get('quantization', {}).get('enabled', False):
+
+            # ** Special Rule **: Only encoder models use full quantization with calibration dataset
             if "encoder" in model_name.lower():
-                # only encoder models use full quantization
+
                 try:
                     # === [Optimization] Check if dataset list already exists ===
-                    # The name of the calibration dataset file is fixed to "calibration_list.txt"
-                    expected_ds_path = os.path.join(self.json_workspace, "calibration_list.txt")
-
                     if os.path.exists(expected_ds_path):
                         logger.info(f"⏩ [SKIP] Found existing calibration dataset: {expected_ds_path}")
                         ds_path = expected_ds_path
                     else:
-                        # 只有不存在时才生成
+                        # generate if not exists
                         calibrator = CalibrationGenerator(self.cfg)
                         ds_path = calibrator.generate(onnx_path, self.json_workspace)
                     # ===========================================================
@@ -86,6 +92,7 @@ class PipelineEngine:
             else:
                 # Other models (decoder, joiner) utilize fp16 only
                 json_build_duplicate['quantization']['enabled'] = False
+
         return json_build_duplicate
 
     def _load_config(self, path):
@@ -149,9 +156,9 @@ class PipelineEngine:
                 logger.error(f"Preprocessing failed for {json_model_name}")
                 continue
 
-            # --- Stage 2: RKNN Conversion ---
+            # 6. Processing -- Build Configuration Preparation
             logger.info(f"\n===== II. Calibration Dataset =====")
-            final_json_build = self._prepare_build_from_json(json_model_name, processed_onnx_path)
+            final_json_build = self._prepare_quantization_config(json_model_name, processed_onnx_path)
 
             # 4. 执行标准转换与评估 (Level 2)
             logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
