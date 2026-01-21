@@ -41,7 +41,7 @@ build:
   quantization:
     enabled: true
     dtype: "asymmetric_quantized-8"
-    dataset: "./data/calibration_list.txt"
+    dataset: "./data/calibration_list-fake.txt"
     sampling_interval: 5           # Use every 5th sample from the dataset for calibration
 
 models:

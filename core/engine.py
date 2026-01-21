@@ -22,17 +22,17 @@ import os
 import yaml
 from core.utils import logger, ensure_dir
 from core.preprocessor import Preprocessor
-from core.rknn_adapter import RKNNAdapter
-from core.downloader import ModelDownloader  # <--- 新增引用
-import numpy as np
-import onnxruntime as ort
-from core.dsp.audio_features import SherpaFeatureExtractor
-from core.verification.comparator import ModelComparator
+# from core.rknn_adapter import RKNNAdapter
+from core.downloader import ModelDownloader
+# import numpy as np
+# import onnxruntime as ort
+# from core.dsp.audio_features import SherpaFeatureExtractor
+# from core.verification.comparator import ModelComparator
 from core.quantization.configurator import QuantizationConfigurator
 from core.workflow.converter import StandardConverter
 from core.workflow.recoverer import PrecisionRecoverer
-import time
-import copy
+# import time
+# import copy
 
 
 class PipelineEngine:
@@ -92,7 +92,7 @@ class PipelineEngine:
             json_model_path = json_model["path"]
             json_model_url = json_model.get("url", None)
             json_strategies = json_model.get("preprocess", {})
-            rknn_output_path = os.path.join(self.json_output_dir, f"{json_model_name}.rknn")
+            # rknn_output_path = os.path.join(self.json_output_dir, f"{json_model_name}.rknn")
             json_input_shapes = json_model.get('input_shapes', None)
 
             # Preparation -- b. Echo helper info
@@ -125,11 +125,21 @@ class PipelineEngine:
             logger.info(f"\n===== II. Calibration Dataset =====")
             final_json_build = self.quant_configurator.configure(json_model_name, processed_onnx_path)
 
+            # === [NEW] Dynamic Filename Strategy ===
+            # Check the FINAL decision made by the configurator
+            if final_json_build.get('quantization', {}).get('enabled', False):
+                precision_suffix = "int8"
+            else:
+                precision_suffix = "fp16"
+
+            # Construct the final output path with precision suffix
+            rknn_output_name = f"{json_model_name}_{precision_suffix}.rknn"
+            rknn_output_path = os.path.join(self.json_output_dir, rknn_output_name)
+
+            logger.info(f"🎯 Target Output: {rknn_output_path} (Precision: {precision_suffix.upper()})")
+
             # Processing -- c. Execute Standard Conversion & Evaluation (Level 2)
             logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
-            # score = self._convert_and_evaluate(json_target_platform, json_model_name, processed_onnx_path,
-            #                                    rknn_output_path, json_input_shapes, final_json_build,
-            #                                    custom_string, json_model)
             score = self.converter.convert_and_evaluate(
                 json_target_platform, json_model_name, processed_onnx_path, rknn_output_path,
                 json_input_shapes, final_json_build, custom_string, json_model)
