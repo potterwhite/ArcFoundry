@@ -6,6 +6,7 @@ import json
 from core.utils import logger
 from core.quantization.calibrator import CalibrationGenerator
 
+
 class QuantizationConfigurator:
     """
     Manages the quantization configuration logic and dependency resolution.
@@ -67,11 +68,21 @@ class QuantizationConfigurator:
         # Processing -- 2. Try to get dataset path
         try:
             ds_path = self._get_dataset_path(onnx_path)
+
+            # 打印一下拿到的路径是什么，方便调试
+            logger.debug(f"Calibration Generator returned: {ds_path}")
+
             if ds_path and os.path.exists(ds_path):
                 json_build_duplicate['quantization']['dataset'] = ds_path
             else:
+                logger.warning(f"⚠️ Dataset path is invalid: {ds_path}. Disabling quantization.")
                 json_build_duplicate['quantization']['enabled'] = False
-        except:
+
+        except Exception as e:
+            logger.error(f"❌ Dataset Generation Crashing: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())  # 打印详细报错堆栈
+
             json_build_duplicate['quantization']['enabled'] = False
 
         # Debug: Log final quantization config

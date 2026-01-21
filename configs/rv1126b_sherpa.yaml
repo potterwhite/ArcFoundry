@@ -41,8 +41,8 @@ build:
   quantization:
     enabled: true
     dtype: "asymmetric_quantized-8"
-    dataset: "./data/calibration_list.txt"  # <--- 指向刚才复制的列表
-    sampling_interval: 5           # <--- 采样间隔 (每5帧存一次，平衡速度与精度)
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5           # Use every 5th sample from the dataset for calibration
 
 models:
   - name: "encoder"
