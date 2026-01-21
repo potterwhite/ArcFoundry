@@ -3,6 +3,8 @@
 import os
 import copy
 import json
+import sys
+import select
 from core.utils import logger
 from core.quantization.calibrator import CalibrationGenerator
 
@@ -22,16 +24,57 @@ class QuantizationConfigurator:
         self.cfg = global_config
         self.workspace_dir = workspace_dir
 
-    def _alert_fallback(self, reason):
+    def _timed_input(self, prompt, timeout=30, default='y'):
         """
-        Prints a loud, unmistakable warning box when quantization fails.
+        Waits for user input with a countdown. Returns default if timeout.
+        Works on Linux/Unix systems.
         """
+        sys.stdout.write(f"{prompt} (Timeout: {timeout}s, Default: {default.upper()}): ")
+        sys.stdout.flush()
+
+        # Monitor sys.stdin for input
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+
+        if ready:
+            user_input = sys.stdin.readline().strip().lower()
+            return user_input if user_input else default
+        else:
+            sys.stdout.write(f"\n[TIMEOUT] No input received. Auto-selecting default: {default.upper()}\n")
+            return default
+
+    def _handle_fallback(self, reason):
+        """
+        Handles the missing dataset situation:
+        1. Alerts the user.
+        2. Waits 30s for decision (Exit or Continue as FP16).
+        3. Exits program if user chooses 'n'.
+        """
+        # Preparation -- 1. Define local variables
+        timeout = 30
         msg = [
-            "!" * 60, "!!! QUANTIZATION FALLBACK TRIGGERED !!!", "!" * 60, f"Reason : {reason}",
-            "Action : Switching logic to FP16 mode.",
-            "Notice : Output filename will be tagged with '_fp16.rknn'.", "!" * 60
+            "\n" + "!" * 60,
+            "!!! QUANTIZATION DATASET MISSING !!!",
+            "!" * 60,
+            f"Reason : {reason}",
+            "!" * 60 + "\n"
         ]
-        logger.warning("\n" + "\n".join(msg) + "\n")
+
+        # Preparation -- 2. Print alert message
+        logger.info("\n".join(msg))
+
+        logger.info("⚠️  Action Required:")
+        logger.info("   [Y] Downgrade to FP16 and continue (Default)")
+        logger.info("   [N] Abort pipeline immediately")
+
+        # Processing -- 1. Wait for user decision with timeout
+        choice = self._timed_input(">>> Accept FP16 fallback? [Y/n]", timeout, default='y')
+
+        # Processing -- 2. Act based on user choice
+        if choice == 'n':
+            logger.error("⛔ Pipeline aborted by user choice.")
+            sys.exit(1)
+
+        logger.warning("⚠️  Proceeding with FP16 Fallback mode...")
 
     def _get_dataset_path(self, onnx_path):
         # Preparation -- 2. Define expected calibration dataset path
@@ -87,17 +130,18 @@ class QuantizationConfigurator:
             else:
                 # Case A: Generator returned None or file doesn't exist
                 reason = f"Dataset generator returned invalid path: {ds_path}"
-                self._alert_fallback(reason)
+                self._handle_fallback(reason)
                 json_build_duplicate['quantization']['enabled'] = False
 
         except Exception as e:
             # Case B: Generator crashed (e.g., config error, missing file)
             # Print the stack trace for debugging, but don't crash the pipeline
-            logger.error(f"❌ Calibration Generator Crashed: {str(e)}")
+
+            error_msg = f"Calibration Generator crashed: {str(e)}"
             # import traceback
             # logger.error(traceback.format_exc())
 
-            self._alert_fallback("Calibration Generator crashed (see error above).")
+            self._handle_fallback(error_msg)
             json_build_duplicate['quantization']['enabled'] = False
 
         # Debug: Log final quantization config
