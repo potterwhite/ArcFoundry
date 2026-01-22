@@ -46,14 +46,14 @@ class PrecisionRecoverer:
         model_prefix = os.path.splitext(onnx_basename)[0]
 
         # Predicted paths for generated files (in CWD)
-        # === [MODIFIED] Force paths to be inside the temp directory ===
-        cfg_file = os.path.join(self.output_dir, f"{model_prefix}.quantization.cfg")
-        model_file = os.path.join(self.output_dir, f"{model_prefix}.model")
-        data_file = os.path.join(self.output_dir, f"{model_prefix}.data")
+        # # === [MODIFIED] Force paths to be inside the temp directory ===
+        # cfg_file = os.path.join(self.output_dir, f"{model_prefix}.quantization.cfg")
+        # model_file = os.path.join(self.output_dir, f"{model_prefix}.model")
+        # data_file = os.path.join(self.output_dir, f"{model_prefix}.data")
         # ==============================================================
-        # cfg_file = f"{model_prefix}.quantization.cfg"
-        # model_file = f"{model_prefix}.model"
-        # data_file = f"{model_prefix}.data"
+        cfg_file = f"{model_prefix}.quantization.cfg"
+        model_file = f"{model_prefix}.model"
+        data_file = f"{model_prefix}.data"
 
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
         error_report = os.path.join(analysis_dir, "error_analysis.txt")
@@ -83,8 +83,10 @@ class PrecisionRecoverer:
 
         logger.info(f"   ✨ Step 1/2 Complete. Config generated at: ./{cfg_file}")
 
-        # 3. Modify the Config (Auto vs Manual)
-        logger.info("\n   [SELECT STRATEGY]")
+        # 3. Step 2/2: User Selection of Sensitive Layers
+        logger.info("\n\n")
+        logger.info("   ✨ Step 2/2 Started:")
+        logger.info("   [SELECT STRATEGY]")
         logger.info("   (a) Auto-Patch: Automatically set layers < threshold to float16.")
         logger.info("   (m) Manual: You edit the .cfg file yourself.")
         mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
@@ -104,7 +106,7 @@ class PrecisionRecoverer:
             # Call the patching method we just added to Adapter
             adapter.apply_hybrid_patch(cfg_file, error_report, threshold)
 
-        # 4. Step 2: Build Final Model
+        # 4. Step 2/2: Build Final Model
         logger.info(f"🔄 Executing Hybrid Step 2...")
         if adapter.hybrid_step2(model_file, data_file, cfg_file):
             # 5. Export
