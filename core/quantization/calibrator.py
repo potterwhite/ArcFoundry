@@ -92,4 +92,5 @@ class CalibrationGenerator:
             return list_file_path
 
         # Main Processing -- Delegate to strategy
+        #   Note : this run() actually in "core/quantization/strategies/xxxx.py" which is according to self.model_type we specified earlier
         return self.strategy.run(onnx_path, output_dir, json_ds_path)

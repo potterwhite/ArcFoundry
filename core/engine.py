@@ -18,22 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import glob
 import os
 import yaml
 from core.utils import logger, ensure_dir, cleanup_garbage
 from core.preprocessor import Preprocessor
-# from core.rknn_adapter import RKNNAdapter
 from core.downloader import ModelDownloader
-# import numpy as np
-# import onnxruntime as ort
-# from core.dsp.audio_features import SherpaFeatureExtractor
-# from core.verification.comparator import ModelComparator
 from core.quantization.configurator import QuantizationConfigurator
 from core.workflow.converter import StandardConverter
 from core.workflow.recoverer import PrecisionRecoverer
-# import time
-# import copy
 
 
 class PipelineEngine:

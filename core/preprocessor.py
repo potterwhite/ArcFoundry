@@ -35,68 +35,6 @@ class Preprocessor:
     def __init__(self, config):
         self.cfg = config
 
-    def preprocess(self, onnx_path, output_path, json_strategies):
-        """
-        Applies a series of preprocessing strategies to the ONNX model.
-        """
-        # Preparation -- 1. Define Variables
-        current_model_path = onnx_path
-        custom_string = None
-        modified = False
-
-        # Processing -- 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
-        if json_strategies.get('extract_metadata', False):
-            logger.info("Strategy: Extracting Custom Metadata...")
-            custom_string = self._extract_metadata(current_model_path)
-
-        # Preparation -- 2. Existing Check
-        if os.path.exists(output_path):
-            try:
-                logger.info(f"[Cache Hit] Found existing file: {output_path}")
-                onnx.load(output_path)
-                logger.info("⏩ [FAST-FORWARD] Model is valid. Skipping complex preprocessing steps.\n")
-
-                return output_path, custom_string
-            except Exception:
-                logger.warning(f"   Cached model corrupted or invalid ({e}). removing and regenerating...")
-                try:
-                    os.remove(output_path)
-                except OSError:
-                    pass
-
-        # Preparation -- 3. Load model for graph modification
-        try:
-            model = onnx.load(current_model_path)
-        except Exception as e:
-            logger.error(f"Failed to load ONNX model: {e}")
-            return None, None
-
-        # Processing -- 2. Fix Dynamic Shape
-        if json_strategies.get('fix_dynamic_shape', False):
-            logger.info("Strategy: Fixing Dynamic Shapes...")
-            if self._fix_dynamic_shapes(model):
-                modified = True
-
-        # Processing -- 3. Fix INT64 Type (Decoder specific)
-        if json_strategies.get('fix_int64_type', False):
-            logger.info("Strategy: Fixing INT64 Types for inputs...")
-            if self._fix_int64_type(model):
-                modified = True
-
-        # Processing -- 4. Save intermediate if modified
-        if modified:
-            logger.debug(f"Saving intermediate fixed model to {output_path}")
-            onnx.save(model, output_path)
-            current_model_path = output_path
-
-        # Processing -- 5. Simplify (onnxsim)
-        if json_strategies.get('simplify', False):
-            logger.info("Strategy: Running ONNX Simplifier...")
-            current_model_path = self._simplify(current_model_path, output_path)
-
-        # Finalization
-        return current_model_path, custom_string
-
     def _fix_dynamic_shapes(self, model):
         """Iterates through inputs and sets dim_param to 1."""
         changed = False
@@ -164,3 +102,65 @@ class Preprocessor:
         except Exception as e:
             logger.error(f"Failed to extract metadata: {e}")
             return None
+
+    def preprocess(self, onnx_path, output_path, json_strategies):
+        """
+        Applies a series of preprocessing strategies to the ONNX model.
+        """
+        # Preparation -- 1. Define Variables
+        current_model_path = onnx_path
+        custom_string = None
+        modified = False
+
+        # Processing -- 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
+        if json_strategies.get('extract_metadata', False):
+            logger.info("Strategy: Extracting Custom Metadata...")
+            custom_string = self._extract_metadata(current_model_path)
+
+        # Preparation -- 2. Existing Check
+        if os.path.exists(output_path):
+            try:
+                logger.info(f"[Cache Hit] Found existing file: {output_path}")
+                onnx.load(output_path)
+                logger.info("⏩ [FAST-FORWARD] Model is valid. Skipping complex preprocessing steps.\n")
+
+                return output_path, custom_string
+            except Exception:
+                logger.warning(f"   Cached model corrupted or invalid ({e}). removing and regenerating...")
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+
+        # Preparation -- 3. Load model for graph modification
+        try:
+            model = onnx.load(current_model_path)
+        except Exception as e:
+            logger.error(f"Failed to load ONNX model: {e}")
+            return None, None
+
+        # Processing -- 2. Fix Dynamic Shape
+        if json_strategies.get('fix_dynamic_shape', False):
+            logger.info("Strategy: Fixing Dynamic Shapes...")
+            if self._fix_dynamic_shapes(model):
+                modified = True
+
+        # Processing -- 3. Fix INT64 Type (Decoder specific)
+        if json_strategies.get('fix_int64_type', False):
+            logger.info("Strategy: Fixing INT64 Types for inputs...")
+            if self._fix_int64_type(model):
+                modified = True
+
+        # Processing -- 4. Save intermediate if modified
+        if modified:
+            logger.debug(f"Saving intermediate fixed model to {output_path}")
+            onnx.save(model, output_path)
+            current_model_path = output_path
+
+        # Processing -- 5. Simplify (onnxsim)
+        if json_strategies.get('simplify', False):
+            logger.info("Strategy: Running ONNX Simplifier...")
+            current_model_path = self._simplify(current_model_path, output_path)
+
+        # Finalization
+        return current_model_path, custom_string

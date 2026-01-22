@@ -55,7 +55,7 @@ class SherpaFeatureExtractor:
             # 1. Load Audio
             waveform, _ = librosa.load(audio_path, sr=self.sample_rate)
 
-            # 2. Dithering )
+            # 2. Dithering 
             if self.dither > 0.0:
                 waveform += self.dither * np.random.randn(*waveform.shape)
 

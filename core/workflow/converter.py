@@ -24,7 +24,7 @@ import onnxruntime as ort
 from core.utils import logger
 from core.rknn_adapter import RKNNAdapter
 from core.verification.comparator import ModelComparator
-from core.dsp.audio_features import SherpaFeatureExtractor
+from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
 
 
 class StandardConverter:

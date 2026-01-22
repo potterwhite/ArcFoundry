@@ -26,7 +26,7 @@ import onnxruntime as ort
 from pathlib import Path
 from tqdm import tqdm
 from core.utils import logger, ensure_dir
-from core.dsp.audio_features import SherpaFeatureExtractor
+from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
 from . import register_strategy
 
 
@@ -46,7 +46,23 @@ class StreamingAudioStrategy:
         self.cfg = config
         # Default sampling interval: save data every 5 frames
         self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
-        self.dsp = SherpaFeatureExtractor()
+        self.sherpa_extractor = SherpaFeatureExtractor()
+
+    def _load_audio_list(self, dataset_path):
+        if not os.path.exists(dataset_path):
+            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+        with open(dataset_path, 'r') as f:
+            return [x.strip() for x in f.readlines() if x.strip()]
+
+    def _get_numpy_dtype(self, onnx_type):
+        mapping = {
+            'tensor(float)': np.float32,
+            'tensor(float16)': np.float16,
+            'tensor(int64)': np.int64,
+            'tensor(int32)': np.int32,
+            'tensor(bool)': bool
+        }
+        return mapping.get(onnx_type, np.float32)
 
     def run(self, onnx_path, output_dir, dataset_path):
         """
@@ -60,36 +76,52 @@ class StreamingAudioStrategy:
         Returns:
             str: Path to the generated dataset_list.txt.
         """
-        # 1. Load audio paths
+        # Preparation -- 1. Load audio paths
         audio_paths = self._load_audio_list(dataset_path)
         logger.info(f"⚡ [Strategy: Streaming] Generating calibration data from {len(audio_paths)} files...")
 
-        # 2. Setup directories
+        # Preparation -- 2. Setup directories
         npy_dir = os.path.join(output_dir, "calibration_data")
         ensure_dir(npy_dir)
 
-        # 3. Analyze ONNX Input/Output for State initialization
+        # Preparation -- 3. Get ONNX model I/O metadata
+        # The inputs and outputs of the entire graph are fixed.
+        # There are exactly 36 inputs (including x) and 36 outputs (including encoder_out).
+        # These are scattered throughout the graph.
+        # so the "ort.InferenceSession.get_inputs and get_outputs" are essentially retrieving the information for these 72 nodes in the NodeArg format
         sess = ort.InferenceSession(onnx_path)
         inputs_meta = sess.get_inputs()
         outputs_meta = sess.get_outputs()
 
-        # Initialize states with zeros (Assumption: input[0] is feature, input[1:] are states)
+        # Preparation -- 4. Initialize states with zeros (Assumption: input[0] is feature, input[1:] are states)
         initial_states = {}
         for inp in inputs_meta[1:]:
             dtype = self._get_numpy_dtype(inp.type)
+            # ******
             # Handle dynamic shapes: replace string/'None' with 1
-            shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
+            # shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
+            # ------
+            shape = []  # New a list to hold processed shape
+
+            for d in inp.shape:
+                # Check if the dimension is a string (e.g., "batch_size") or None
+                if isinstance(d, str) or d is None:
+                    shape.append(1)  # If it's a dynamic dimension, force it to 1
+                else:
+                    shape.append(d)  # If it's a normal number (fixed dimension), keep it as is
+            # ******
             initial_states[inp.name] = np.zeros(shape, dtype=dtype)
 
-        # 4. Processing Loop
+        # Preparation -- 5. Define variables
         generated_lines = []
         CHUNK_SIZE = 39  # Fixed chunk size for Sherpa
         CHUNK_SHIFT = 19  # Fixed stride for Sherpa
 
+        # Processing -- 1. Main Loop: Process each audio file
         for audio_path in tqdm(audio_paths, desc="Calibrating (Streaming)"):
             try:
                 # DSP Feature Extraction [T, 80]
-                all_features = self.dsp.compute(audio_path)
+                all_features = self.sherpa_extractor.compute(audio_path)
                 total_frames = all_features.shape[0]
 
                 current_states = initial_states.copy()
@@ -144,19 +176,3 @@ class StreamingAudioStrategy:
 
         logger.info(f"Calibration dataset ready: {len(generated_lines)} samples.")
         return list_file_path
-
-    def _load_audio_list(self, dataset_path):
-        if not os.path.exists(dataset_path):
-            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
-        with open(dataset_path, 'r') as f:
-            return [x.strip() for x in f.readlines() if x.strip()]
-
-    def _get_numpy_dtype(self, onnx_type):
-        mapping = {
-            'tensor(float)': np.float32,
-            'tensor(float16)': np.float16,
-            'tensor(int64)': np.int64,
-            'tensor(int32)': np.int32,
-            'tensor(bool)': bool
-        }
-        return mapping.get(onnx_type, np.float32)
