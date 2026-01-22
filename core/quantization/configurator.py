@@ -4,8 +4,7 @@ import os
 import copy
 import json
 import sys
-import select
-from core.utils import logger
+from core.utils import logger, timed_input
 from core.quantization.calibrator import CalibrationGenerator
 
 
@@ -24,23 +23,6 @@ class QuantizationConfigurator:
         self.cfg = global_config
         self.workspace_dir = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
 
-    def _timed_input(self, prompt, timeout=30, default='y'):
-        """
-        Waits for user input with a countdown. Returns default if timeout.
-        Works on Linux/Unix systems.
-        """
-        sys.stdout.write(f"{prompt} (Timeout: {timeout}s, Default: {default.upper()}): ")
-        sys.stdout.flush()
-
-        # Monitor sys.stdin for input
-        ready, _, _ = select.select([sys.stdin], [], [], timeout)
-
-        if ready:
-            user_input = sys.stdin.readline().strip().lower()
-            return user_input if user_input else default
-        else:
-            sys.stdout.write(f"\n[TIMEOUT] No input received. Auto-selecting default: {default.upper()}\n")
-            return default
 
     def _handle_fallback(self, reason):
         """
@@ -67,7 +49,7 @@ class QuantizationConfigurator:
         logger.info("   [N] Abort pipeline immediately")
 
         # Processing -- 1. Wait for user decision with timeout
-        choice = self._timed_input(">>> Accept FP16 fallback? [Y/n]", timeout, default='y')
+        choice = timed_input(">>> Accept FP16 fallback? [Y/n]", timeout, default='y')
 
         # Processing -- 2. Act based on user choice
         if choice == 'n':

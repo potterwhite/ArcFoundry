@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 import os
-from core.utils import logger
+from core.utils import logger, timed_input
 from core.rknn_adapter import RKNNAdapter
 
 
@@ -60,7 +60,8 @@ class PrecisionRecoverer:
 
         # 1. Ask User
         logger.info(f"\n[INTERVENTION] Accuracy is below threshold.")
-        choice = input(f"   >>> Start Hybrid Quantization Step 1/2? [Y/n]: ").strip().lower()
+        # choice = input(f"   >>> Start Hybrid Quantization Step 1/2? [Y/n]: ").strip().lower()
+        choice = timed_input("   >>> Start Hybrid Quantization Step 1/2? [Y/n]: ", timeout=15, default='y')
         if choice not in ('', 'y', 'yes'):
             return
         else:
@@ -89,7 +90,9 @@ class PrecisionRecoverer:
         logger.info("   [SELECT STRATEGY]")
         logger.info("   (a) Auto-Patch: Automatically set layers < threshold to float16.")
         logger.info("   (m) Manual: You edit the .cfg file yourself.")
-        mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
+        # mode = input("   >>> Select mode [a/m] (default: a): ").strip().lower()
+        mode = timed_input("   >>> Select mode [a/m] (default: a): ", timeout=10, default='a')
+        # logger.error(f"\n\nmode: {mode}++++++\n\n")
 
         if mode == 'm':
             logger.info(f"\n   !!! ACTION: Please edit ./{cfg_file} now.")
@@ -97,7 +100,12 @@ class PrecisionRecoverer:
             input("   >>> Press [ENTER] when you are ready for Step 2...")
         else:
             # Auto Mode
-            thresh_input = input("   >>> Enter min cosine score threshold (default 0.99): ").strip()
+            # thresh_input = input("   >>> Enter min cosine score threshold (default 0.99): ").strip()
+            thresh_input = timed_input("   >>> Enter min cosine score threshold (default 0.99): ",
+                                       timeout=15,
+                                       default='0.99')
+            # logger.error(f"\n\nthresh_input: {thresh_input}++++++\n\n")
+
             try:
                 threshold = float(thresh_input) if thresh_input else 0.99
             except ValueError:

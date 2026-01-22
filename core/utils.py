@@ -22,6 +22,7 @@ import logging
 import sys
 import os
 import glob
+import select
 
 
 # 1. Define the Custom Formatter
@@ -67,6 +68,25 @@ logger = logging.getLogger("ArcFoundry")
 def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def timed_input(prompt, timeout=30, default='y'):
+    """
+    Waits for user input with a countdown. Returns default if timeout.
+    Works on Linux/Unix systems.
+    """
+    sys.stdout.write(f"{prompt} (Timeout: {timeout}s, Default: {default.upper()}): ")
+    sys.stdout.flush()
+
+    # Monitor sys.stdin for input
+    ready, _, _ = select.select([sys.stdin], [], [], timeout)
+
+    if ready:
+        user_input = sys.stdin.readline().strip().lower()
+        return user_input if user_input else default
+    else:
+        sys.stdout.write(f"\n[TIMEOUT] No input received. Auto-selecting default: {default.upper()}\n")
+        return default
 
 
 def cleanup_garbage(target_dir=".", patterns=None):
