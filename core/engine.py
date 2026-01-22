@@ -169,10 +169,7 @@ class PipelineEngine:
         if FAILED_MODELS:
             logger.info(f"\nFailed Models: {FAILED_MODELS}\n")
 
-
         # === [MODIFIED] Cleanup using utility function ===
-        cleanup_garbage()  # 默认清理当前目录下的垃圾
+        cleanup_garbage()
 
         logger.info("==============================================================")
-
-

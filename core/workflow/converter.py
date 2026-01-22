@@ -45,20 +45,18 @@ class StandardConverter:
         min_score = 1.0  # Default safe value
 
         try:
-            # 1. 初始化对比器
+            # 1. Initialize Comparator
             target_platform = self.cfg.get("target", {}).get("platform")
             comparator = ModelComparator(target_platform)
 
             # --- CHANGE START ---
-            # 旧代码: comparator.load_rknn(rknn_path)
-            # 新代码: 传入 onnx路径, input_shapes, 和 build配置 进行影子编译
             input_shapes = model_cfg.get("input_shapes", None)
             #build_config = self.cfg.get("build", {})
 
             comparator.prepare_simulator(onnx_path, input_shapes, build_config)
             # --- CHANGE END ---
 
-            # 2. 准备输入数据 (保持不变)
+            # 2. Prepare Input Data
             sess = ort.InferenceSession(onnx_path)
             input_feed = {}
             extractor = SherpaFeatureExtractor()
@@ -81,7 +79,7 @@ class StandardConverter:
                 elif "float16" in onnx_type:
                     np_dtype = np.float16
 
-                # 处理动态 Shape
+                # Deal with Dynamic Shape (Replace string/None with 1) --- IGNORE ---
                 static_shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
 
                 # c. Generate Input Data
@@ -109,14 +107,14 @@ class StandardConverter:
                         # Generate random floats
                         input_feed[inp.name] = np.random.rand(*static_shape).astype(np_dtype)
 
-            # 3. 执行对比
+            # 3. Execute Comparison
             metrics = comparator.compare_with_onnx(onnx_path, input_feed)
 
-            # [新增] 计算最低分
+            # Calculate minimum score
             if metrics:
                 min_score = min(metrics.values())
 
-            # 4. 判定结果
+            # 4. Determine Result
             if comparator.validate_metric(metrics, threshold=0.98):
                 logger.info(f"✅ Verification PASSED: {model_cfg['name']} matches ONNX baseline.")
             else:
@@ -127,46 +125,51 @@ class StandardConverter:
         except Exception as e:
             logger.error(f"❌ Verification Failed: {str(e)}")
             import traceback
-
-            logger.error(traceback.format_exc())  # 打印详细堆栈方便调试
+            # Print full traceback for debugging
+            logger.error(traceback.format_exc())
 
         return min_score
 
     # --------------------------------------------------------------------------
-    # Level 2: 标准转换与评估逻辑
+    # Level 2: Standard Conversion & Evaluation
     # --------------------------------------------------------------------------
     def convert_and_evaluate(self, target_plat, model_name, onnx_path, output_path, input_shapes,
                              build_config, custom_string, model_cfg):
         """
-        负责一次标准的转换流程，并返回精度评分。
-        注意：这个函数负责创建 adapter，使用它，然后必须释放它。
+        Description:
+            This function handles a standard conversion process and returns an accuracy score.
+        Note:
+            This function is responsible for creating the adapter, using it, and must release it.
+        Returns:
+            float: The accuracy score (0.0 - 1.0). Returns 0.0 if conversion fails.
         """
-        # === [Fast-Forward] Check for existing analysis report ===
-        # 如果精度分析报告已存在，说明之前跑过且失败了，直接跳过构建，强制触发混合量化修复
+
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
         existing_report = os.path.join(analysis_dir, "error_analysis.txt")
 
-        # 只有当 RKNN 模型存在 且 分析报告也存在时，才跳过
+        # === [Fast-Forward] Check for existing analysis report ===
+        # Only trigger if both RKNN model and analysis report exist
         if os.path.exists(output_path) and os.path.exists(existing_report):
             logger.warning(f"⏩ [FAST-FORWARD] Found existing analysis report: {existing_report}")
             logger.warning(f"   Skipping Build & Verification to jump straight to Hybrid Quantization logic.")
-            return 0.0  # 返回 0.0 分，强制触发 _recover_precision
+
+            # return 0.0 to trigger recovery flow
+            return 0.0
         # =========================================================
 
         adapter = RKNNAdapter(target_platform=target_plat, verbose=build_config.get('verbose', False))
 
-        # A. 转换
+        # Processing -- A. Convert
         ret = adapter.convert(onnx_path, output_path, input_shapes, build_config, custom_string)
         score = 1.0
 
         if ret:
             logger.info(f"SUCCESS: Standard model saved to {output_path}")
 
-            # B. 验证 (Verify)
+            # Processing -- B. Verify (Verification)
             score = self._verify_model(model_cfg, onnx_path, build_config)
 
-            # C. 如果分数低，利用当前还活着的 adapter 做一次“尸检” (精度分析)
-            #    这样我们就不用为了分析再重新 load 一次了
+            # Processing -- C. Deep Analysis if Low Score
             is_quant = build_config.get('quantization', {}).get('enabled', False)
             if is_quant and score < 0.99:
                 logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
@@ -177,6 +180,8 @@ class StandardConverter:
             logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
             score = 0.0
 
-        # 必须释放！因为如果后面要进行混合量化，我们需要一个全新的环境
+        # adapter must be released here for recoverer need a new adapter later
         adapter.release()
+
+        # return the score
         return score

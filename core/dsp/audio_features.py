@@ -25,19 +25,21 @@ import logging
 
 class SherpaFeatureExtractor:
     """
-    专门用于复刻 Sherpa-Onnx C++ 底层特征提取流程的 DSP 模块。
-    确保 Python 端生成的输入数据分布与 C++ Runtime 完全一致。
+    Description:
+        This class replicates the Sherpa-Onnx C++ feature extraction pipeline.
+        It ensures that the input data distribution generated in Python matches
+        that of the C++ runtime.
     """
 
     def __init__(self, sample_rate=16000, n_mels=80):
-        # Sherpa Zipformer 的标准参数
+        # Standard parameters of Sherpa feature extraction
         self.sample_rate = sample_rate
         self.n_fft = 400
         self.hop_length = 160
         self.win_length = 400
         self.n_mels = n_mels
 
-        # 关键预处理参数 (来源于 old-files/09_...py)
+        # Key preprocessing parameters (sourced from old-files/09_...py)
         self.dither = 0.0
         self.remove_dc_offset = True
         self.preemph_coeff = 0.97
@@ -45,21 +47,23 @@ class SherpaFeatureExtractor:
 
     def compute(self, audio_path: str) -> np.ndarray:
         """
-        读取音频并计算 Log-Mel Spectrogram (Shape: [N, 80])
+        Description:
+            This method processes the input audio file and computes the Log-Mel
+            Spectrogram, following the Sherpa-Onnx feature extraction steps.
         """
         try:
             # 1. Load Audio
             waveform, _ = librosa.load(audio_path, sr=self.sample_rate)
 
-            # 2. Dithering (防死锁/增加鲁棒性，虽默认为0但保留接口)
+            # 2. Dithering )
             if self.dither > 0.0:
                 waveform += self.dither * np.random.randn(*waveform.shape)
 
-            # 3. Remove DC Offset (去直流) - 关键步骤
+            # 3. Remove DC Offset
             if self.remove_dc_offset:
                 waveform -= np.mean(waveform)
 
-            # 4. Pre-emphasis (预加重) - 关键步骤
+            # 4. Pre-emphasis
             if self.preemph_coeff > 0.0:
                 waveform = librosa.effects.preemphasis(waveform, coef=self.preemph_coeff)
 
@@ -74,7 +78,7 @@ class SherpaFeatureExtractor:
             )
 
             # 6. Log (Power -> DB)
-            # 注意：这里使用 log(max(x, 1e-10)) 而不是 power_to_db，以对齐 C++
+            #    Note: Using log(max(x, 1e-10)) instead of power_to_db to align with C++
             log_mel = np.log(np.maximum(mel, self.log_zero_guard))
 
             # 7. Transpose to [Time, Feature]

@@ -86,43 +86,9 @@ class RKNNAdapter:
         return True
 
     def convert(self, onnx_path, output_path, input_shapes, config_dict, custom_string=None):
-
-        # # 1. Config
-        # logger.info("--> (1/5). Configuring RKNN...")
-        # # Map YAML config keys to rknn.config arguments
-        # # Note: 'target_platform' in rknn.config expects lowercase, e.g., 'rv1126'
-        # # The SDK user might pass 'rv1126b', we pass it as is, assuming toolkit handles it or user configured correctly.
-
-        # rknn_config_args = {
-        #     "target_platform": self.target,
-        #     "optimization_level": config_dict.get('optimization_level', 3),
-        #     "custom_string": custom_string,
-        #     # Add other config mapping here if needed
-        # }
-
-        # if config_dict.get('pruning', False):
-        #     rknn_config_args['model_pruning'] = True
-
-        # # Quantization setup
-        # quant_config = config_dict.get('quantization', {})
-        # if quant_config.get('enabled', False):
-        #     rknn_config_args['quantized_dtype'] = quant_config['dtype']
-
-        #     # # === [修改点] 加载混合量化配置 JSON 为字典 ===
-        #     # hybrid_conf_path = config_dict.get('quantization', {}).get('hybrid_config_path')
-        #     # if hybrid_conf_path and os.path.exists(hybrid_conf_path):
-        #     #     logger.info(f"⚡ Hybrid Quantization Enabled! Loading config from: {hybrid_conf_path}")
-        #     #     try:
-        #     #         import json
-        #     #         with open(hybrid_conf_path, 'r') as f:
-        #     #             quant_config_dict = json.load(f)
-
-        #     #         # 这里的参数名根据 SDK 版本可能不同，Toolkit2 常用 'quantization_config' 或直接合并
-        #     #         # 通常 safe 的做法是直接传给 config
-        #     #         rknn_config_args['quantization_config'] = quant_config_dict
-        #     #     except Exception as e:
-        #     #         logger.error(f"Failed to load hybrid config: {e}")
-        #     # # ==========================================
+        """
+        Independent full conversion method.
+        """
 
         # logger.debug(f"Config Args: {rknn_config_args}")
         # self.rknn.config(**rknn_config_args)
@@ -185,124 +151,6 @@ class RKNNAdapter:
         # release timing will be handled outside to allow further analysis if needed
         # self.rknn.release()
         return True
-
-    # def generate_quant_config(self, analysis_report_path, output_config_path, auto_threshold=None):
-    #     """
-    #     Parses the error_analysis.txt and generates a hybrid quantization config.
-
-    #     Args:
-    #         analysis_report_path (str): Path to the RKNN accuracy analysis txt.
-    #         output_config_path (str): Path where the JSON config will be saved.
-    #         auto_threshold (float, optional):
-    #             If provided (e.g., 0.99), layers with single-layer cosine similarity
-    #             below this value will be set to 'float16'.
-    #             If None, all layers are set to 'int8' for manual editing.
-    #     """
-
-    #     # Preparation -- 1. Echo welcome info
-    #     logger.info(f"📝 Generating quantization config template from analysis report...")
-
-    #     # Preparation -- 2. Check report existence
-    #     if not os.path.exists(analysis_report_path):
-    #         logger.error(f"Analysis report not found at {analysis_report_path}")
-    #         return False
-
-    #     # Preparation -- 3. Determine hybrid-quantization mode (Manual or Auto)
-    #     use_auto_mode = auto_threshold is not None
-    #     if use_auto_mode:
-    #         logger.info(f"   Mode: AUTO (Threshold: {auto_threshold})")
-    #     else:
-    #         logger.info(f"   Mode: MANUAL template generation")
-
-    #     # Processing -- 4. Define data structures
-    #     layer_configs = {}
-    #     # Regex to capture: [Type] LayerName ... EntireCos | EntireEuc SingleCos ...
-    #     # Based on log: [Reshape] cached_conv1_0_rs  1.00000 | 0.0  0.99000 | 0.0
-    #     # We look for the pattern and specifically the 3rd number (Single Cosine).
-
-    #     # Pattern explanation:
-    #     # ^\[.*?\]\s+   : Start with [Type] and spaces
-    #     # (\S+)         : Capture Group 1: Layer Name (non-whitespace)
-    #     # \s+           : Spaces
-    #     # [\d\.]+\s+\|\s+[\d\.]+ : Skip Entire Cos | Entire Euc
-    #     # \s+           : Spaces
-    #     # ([\d\.]+)     : Capture Group 2: Single Cosine Score
-    #     line_pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
-
-    #     # Processing -- 4. Parse the report
-    #     try:
-    #         with open(analysis_report_path, 'r') as f:
-    #             for line in f:
-    #                 # Logic -- a. Strip line
-    #                 line = line.strip()
-
-    #                 # Logic -- b. Skip non-layer lines
-    #                 if  not line or \
-    #                     line.startswith('#') or \
-    #                     line.startswith('-') or \
-    #                     "layer_name" in line:
-    #                     continue
-
-    #                 # Logic -- c. Extract layer name
-    #                 # 匹配: [Conv] 7206-rs ...
-    #                 # 提取 [] 后面的第一个单词作为层名
-    #                 match = line_pattern.match(line)
-
-    #                 # Logic -- d. Default to int8 for all layers found
-    #                 if match:
-    #                     layer_name = match.group(1)
-    #                     single_cosine_str = match.group(2)
-
-    #                     # Logic -- e. Determine cosine score
-    #                     try:
-    #                         single_cosine = float(single_cosine_str)
-    #                     except ValueError:
-    #                         logger.warning(
-    #                             f"   Could not parse cosine score for layer {layer_name}, skipping...")
-    #                         single_cosine = 1.0  # Default to safe value
-    #                         continue
-
-    #                     # Logic -- f. Decide layer dtype based on mode
-    #                     if use_auto_mode:
-    #                         # Auto Mode: If score is bad, use float16. Otherwise keep int8 defaults (or empty)
-    #                         # To be safe, we only write the overridden layers to the config.
-    #                         if single_cosine < auto_threshold:
-    #                             logger.debug(
-    #                                 f"   📉 Layer {layer_name} score {single_cosine:.4f} < {auto_threshold}. Set to float16."
-    #                             )
-    #                             layer_configs[layer_name] = "float16"
-    #                         else:
-    #                             # For auto mode, we usually don't need to explicitly set int8
-    #                             # unless we want to lock it. RKNN defaults to int8.
-    #                             # Let's skip writing good layers to keep config clean,
-    #                             # or write them as int8 if strict control is needed.
-    #                             pass
-    #                     else:
-    #                         # Manual Mode: Dump everything as int8 so user can see and edit.
-    #                         layer_configs[layer_name] = "int8"
-
-    #         # If Auto mode found no bad layers, but the global score was low,
-    #         # it might be an accumulation error.
-    #         if use_auto_mode and not layer_configs:
-    #             logger.warning(
-    #                 "   [Auto] No single layer dropped below threshold. Problem might be cumulative.")
-
-    #         # Toolkit2 的混合量化配置通常是一个字典，键是层名，值是精度
-    #         # 有时需要包裹在 'override_layer_configs' 或直接作为 config
-    #         # 根据经验，Toolkit2 接受直接的层名映射，或者需要查阅具体版本的 manual
-    #         # 这里我们生成最通用的 {layer: dtype} 格式
-
-    #         # Logic -- 6. Write to JSON
-    #         with open(output_config_path, 'w') as f:
-    #             json.dump(layer_configs, f, indent=4)
-
-    #         # Logic -- 7. Return success
-    #         return True
-    #     except Exception as e:
-    #         logger.error(f"Failed to generate config from report: {e}")
-    #         import traceback
-    #         logger.error(traceback.format_exc())
-    #         return False
 
     def run_deep_analysis(self, dataset_path, output_dir):
         """
@@ -410,16 +258,16 @@ class RKNNAdapter:
         else:
             logger.info(f"   ✅[FOUND] {analysis_path}")
 
-        # Preparation -- 4. Define ALLOWED types (白名单模式)
-        # 既然 RKNN 对很多算子有限制，我们只允许修改那些 100% 安全且对精度影响最大的算子。
-        # 通常是：卷积、全连接、矩阵乘、反卷积。
+        # Preparation -- 4. Define ALLOWED types (Whitelist Mode)
+        # Due to RKNN's limitations on many operators, we only allow modifications on those that are 100% safe and have the most impact on accuracy.
+        # Usually: Conv, Gemm, MatMul, ConvTranspose.
         ALLOWED_TYPES = {
-            'Conv',  # 卷积层 (最核心)
-            'Gemm',  # 全连接/矩阵乘 (最核心)
-            'MatMul',  # 矩阵乘
-            'ConvTranspose',  # 反卷积
-            'Linear',  # 某些旧版转换器可能叫 Linear
-            # 注意：这里故意不放 Add, Mul, Div，因为它们极易因为融合问题导致 Crash
+            'Conv',  # (Most common) Convolution
+            'Gemm',  # Fully Connected Layer
+            'MatMul',  # Matrix Multiplication
+            'ConvTranspose',  # Anti-convolution
+            'Linear',  # Some older converters may call it Linear
+            # Note: Here we deliberately exclude Add, Mul, Div, because they are prone to fusion issues causing crashes
         }
 
         # Preparation -- 5. Initialize bad layer account
@@ -431,7 +279,6 @@ class RKNNAdapter:
         # Log format: [Conv] 123_rs ... 0.999 ... 0.850
         # We need a robust regex similar to what we discussed
         # pattern = re.compile(r'^\[.*?\]\s+(\S+)\s+[\d\.]+\s+\|\s+[\d\.]+\s+([\d\.]+)')
-        # [修改点 1] 增强型正则，支持科学计数法(eE)和正负号(-+)
         pattern = re.compile(r'^\[(.*?)\]\s+(\S+)\s+[0-9eE\.\-\+]+\s+\|\s+[0-9eE\.\-\+]+\s+([0-9eE\.\-\+]+)')
 
         with open(analysis_path, 'r') as f:
@@ -529,24 +376,25 @@ class RKNNAdapter:
                 # ------
 
                 if current_key in bad_layers:
-                    # 保留层名行，不替换
+
+                    # Preserve the layer name line, do not replace
                     new_lines.append(line)
                     i += 1
 
-                    # 记录层名的缩进，用于判断何时离开这个层的块
+                    # Record the indentation of this layer line to know when we exit this block
                     layer_indent = len(line) - len(line.lstrip())
                     dtype_found = False
 
-                    # 继续读取这个层的后续行，直到找到 dtype 或离开这个层
+                    # Continue reading subsequent lines of this layer until we find dtype or exit this layer
                     while i < len(lines):
                         current_line = lines[i]
                         current_indent = len(current_line) - len(current_line.lstrip())
 
-                        # 如果缩进相同或更少，说明已经离开这个层的块了
+                        # If the indentation is the same or less, we have exited this layer block
                         if current_line.strip() and current_indent <= layer_indent:
                             break
 
-                        # 找到 dtype 行，修改它
+                        # Find the dtype line and modify it
                         if current_line.strip().startswith('dtype:'):
                             indent = current_line[:len(current_line) - len(current_line.lstrip())]
                             new_lines.append(f'{indent}dtype: float16\n')
@@ -555,7 +403,7 @@ class RKNNAdapter:
                             i += 1
                             continue
 
-                        # 其他行原样保留
+                        # Keep other lines unchanged
                         new_lines.append(current_line)
                         i += 1
 
