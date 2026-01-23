@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="https://via.placeholder.com/1200x300.png?text=ArcFoundry+Banner+(Place+Your+Image+Here)" alt="Project Banner" width="100%"/>
+  <img src="https://github.com/potterwhite/ArcFoundry/blob/f941fed95221b5453e2b3a0c8dea82a4d867476e/docs/assets/background_light.jpeg" alt="Project Banner" width="100%"/>
 </p>
 
 <p align="center">
