@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/potterwhite/ArcFoundry/compare/v0.7.0...v0.8.0) (2026-01-23)
+
+### 🚀 New Features 
+
+*   **Modular Architecture**: Completely refactored the core engine. The monolithic pipeline is now split into three specialized workers:
+    *   `QuantizationConfigurator`: Manages dataset preparation and precision decisions.
+    *   `StandardConverter`: Handles the standard ONNX to RKNN conversion and verification.
+    *   `PrecisionRecoverer`: Manages the interactive hybrid quantization recovery workflow.
+*   **Smart FP16 Fallback**: If the calibration dataset is missing or invalid, the pipeline now intelligently asks to fallback to FP16 mode instead of crashing.
+*   **Timed Interaction**: Introduced `timed_input` utility. Interactive prompts (e.g., asking to enable hybrid quantization) now have a timeout and will auto-select a default action if the user is away.
+*   **Enhanced Hybrid Patching**:
+    *   Added a **Whitelist Mechanism** (Conv, Gemm, MatMul, Linear) to prevent modifying unsafe internal nodes during auto-patching.
+    *   Improved Regex parsing to support scientific notation in RKNN accuracy analysis reports.
+*   **Auto Cleanup**: Added a `cleanup_garbage` utility to automatically remove intermediate ONNX and RKNN configuration files after a successful build.
+*   **Visualized Verification**: The verification logs now include visual indicators (✅, ⚠️, ❌) and explicit checks for `NaN` or `Inf` values in inference outputs.
+
+### 🛠 Refactoring 
+
+*   **DSP Module**: Renamed `core/dsp/audio_features.py` to `core/dsp/sherpa_features_extractor.py` to explicitly indicate its purpose for Sherpa-Onnx compatibility.
+*   **Streaming Strategy**: Optimized `core/quantization/strategies/streaming.py` to strictly handle dynamic shapes by forcing dimension parameters to `1`.
+*   **Config Structure**: Moved complex build logic out of `engine.py` into dedicated workflow classes.
+
+### 📚 Documentation 
+
+*   **Complete Overhaul**: Redesigned `README.md` with new architectural diagrams (Mermaid) and clearer usage instructions.
+*   **i18n Support**: Added Simplified Chinese documentation (`docs/README_ZH_CN.md`).
+*   **Assets**: Added project banner and architecture illustrations.
+
+### 🔧 Configuration
+
+*   Updated `configs/rv1126b_sherpa.yaml`:
+    *   Changed default `optimization_level` to `3`.
+    *   Clarified `sampling_interval` comments for calibration.
+*   Updated `.gitignore` to exclude RKNN generated temp files (`*.quantization.cfg`, `*.rknn_util_Config`, etc.).
+
+
+* **quantization:** enhance hybrid quantization strategy and patching ([8ee741a](https://github.com/potterwhite/ArcFoundry/commit/8ee741a7bbd4c7d41c91e9a360ff6b2f5a0532a7))
+* **utils:** add interactive utilities and garbage cleanup ([8ee741a](https://github.com/potterwhite/ArcFoundry/commit/8ee741a7bbd4c7d41c91e9a360ff6b2f5a0532a7))
+
 ## [0.7.0](https://github.com/potterwhite/ArcFoundry/compare/v0.6.0...v0.7.0) (2026-01-19)
 
 
