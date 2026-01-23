@@ -9,6 +9,16 @@ output/
 workspace/
 data/
 
+# RKNN Intermediate files
+*.quantization.cfg
+*.model
+*.data
+*.rknn_util_Config
+check.*.onnx
+
+# temporary files
+*.swp
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

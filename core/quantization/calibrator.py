@@ -29,6 +29,7 @@ from core.quantization.strategies import get_strategy_class
 import core.quantization.strategies.streaming
 # Future: import core.quantization.strategies.vision
 
+
 class CalibrationGenerator:
     """
     Facade class for generating calibration datasets.
@@ -62,25 +63,6 @@ class CalibrationGenerator:
             logger.error(str(e))
             raise
 
-    def generate(self, onnx_path, output_dir):
-        """
-        Standard interface called by PipelineEngine.
-        """
-        # 1. Common Logic: Extract dataset path from config
-        dataset_path = self.cfg.get('build', {}).get('quantization', {}).get('dataset')
-
-        if not dataset_path:
-            logger.warning("Quantization enabled but 'dataset' path missing in config.")
-            return None
-
-        # 2. Common Logic: Check Cache (Avoid re-running if exists)
-        list_file_path = os.path.join(output_dir, "dataset_list.txt")
-        if self._check_cache(list_file_path):
-            return list_file_path
-
-        # 3. Delegate to Strategy
-        return self.strategy.run(onnx_path, output_dir, dataset_path)
-
     def _check_cache(self, list_file_path):
         """Simple smoke test to see if calibration data exists."""
         if os.path.exists(list_file_path):
@@ -91,3 +73,24 @@ class CalibrationGenerator:
                     logger.info(f"⏩ [FAST-FORWARD] Found existing calibration list: {list_file_path}")
                     return True
         return False
+
+    def generate(self, onnx_path, output_dir):
+        """
+        Standard interface called by PipelineEngine.
+        """
+        # Preparation -- 1. Common Logic: Extract dataset path from config
+        json_ds_path = self.cfg.get('build', {}).get('quantization', {}).get('dataset')
+        list_file_path = os.path.join(output_dir, "dataset_list.txt")
+
+        # Preparation -- 2. Validate presence of dataset path
+        if not json_ds_path:
+            logger.warning("Quantization enabled but 'dataset' path missing in config.")
+            return None
+
+        # Preparation -- 3. Common Logic: Check Cache (Avoid re-running if exists)
+        if self._check_cache(list_file_path):
+            return list_file_path
+
+        # Main Processing -- Delegate to strategy
+        #   Note : this run() actually in "core/quantization/strategies/xxxx.py" which is according to self.model_type we specified earlier
+        return self.strategy.run(onnx_path, output_dir, json_ds_path)
