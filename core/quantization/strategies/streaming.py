@@ -121,13 +121,14 @@ class StreamingAudioStrategy:
         for audio_path in tqdm(audio_paths, desc="Calibrating (Streaming)"):
             try:
                 # DSP Feature Extraction [T, 80]
+                # Processing -- a. Extract features with sherpa`s model settings
                 all_features = self.sherpa_extractor.compute(audio_path)
                 total_frames = all_features.shape[0]
 
                 current_states = initial_states.copy()
                 step_counter = 0
 
-                # Sliding Window Simulation
+                # Processing -- b. Sliding Window Inference Simulation
                 for start in range(0, total_frames, CHUNK_SHIFT):
                     end = start + CHUNK_SIZE
                     if end > total_frames:
