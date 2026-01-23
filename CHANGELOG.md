@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/potterwhite/ArcFoundry/compare/v0.7.0...v0.8.0) (2026-01-23)
+
+
+### ✨ Added
+
+* **quantization:** enhance hybrid quantization strategy and patching ([8ee741a](https://github.com/potterwhite/ArcFoundry/commit/8ee741a7bbd4c7d41c91e9a360ff6b2f5a0532a7))
+* **utils:** add interactive utilities and garbage cleanup ([8ee741a](https://github.com/potterwhite/ArcFoundry/commit/8ee741a7bbd4c7d41c91e9a360ff6b2f5a0532a7))
+
 ## [0.7.0](https://github.com/potterwhite/ArcFoundry/compare/v0.6.0...v0.7.0) (2026-01-19)
 
 
