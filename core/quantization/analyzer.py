@@ -21,6 +21,7 @@
 import os
 from core.utils import logger, ensure_dir
 
+
 class QuantizationAnalyzer:
     """
     v0.5.0 Feature: Quantization Accuracy Analyzer (The "CT Scanner")
@@ -72,12 +73,10 @@ class QuantizationAnalyzer:
         # 4. Invoke RKNN Analysis Tool
         # target=None implies running on the PC Simulator.
         try:
-            ret = self.rknn.accuracy_analysis(
-                inputs=target_input,
-                output_dir=snapshot_dir,
-                target=None,
-                device_id=None
-            )
+            ret = self.rknn.accuracy_analysis(inputs=target_input,
+                                              output_dir=snapshot_dir,
+                                              target=None,
+                                              device_id=None)
 
             if ret == 0:
                 logger.info(f"✅ Accuracy Analysis completed.")
@@ -89,4 +88,3 @@ class QuantizationAnalyzer:
         except Exception as e:
             logger.error(f"❌ Accuracy Analysis crashed: {e}")
         logger.info("################\n")
-

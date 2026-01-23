@@ -33,7 +33,7 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  optimization_level: 3  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
   verbose: true
   pruning: true
   eval_memory: false
@@ -41,8 +41,9 @@ build:
   quantization:
     enabled: true
     dtype: "asymmetric_quantized-8"
-    dataset: "./data/calibration_list.txt"  # <--- 指向刚才复制的列表
-    sampling_interval: 5           # <--- 采样间隔 (每5帧存一次，平衡速度与精度)
+    #dataset: "./data/calibration_list-fake.txt"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5           # Use every 5th sample from the dataset for calibration
 
 models:
   - name: "encoder"
