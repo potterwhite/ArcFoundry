@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/potterwhite/ArcFoundry/releases"><img src="https://img.shields.io/github/v/release/potterwhite/ArcFoundry?color=orange&label=version" alt="version"></a>
   <a href="#"><img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python Version"></a>
   <a href="#"><img src="https://img.shields.io/badge/platform-Rockchip%20NPU-orange" alt="Platform"></a>
   <a href="#"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
