@@ -1,0 +1,79 @@
+# Copyright (c) 2026 PotterWhite
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+project:
+  name: "sherpa-zipformer-rk3588"
+  output_dir: "./output/rk3588_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+  # device_id: null
+
+build:
+  # Optimization Level (0-3): Controls the aggressiveness of graph fusion.
+  # 0: Off / Debug. No optimization. Compiles the graph "as-is". Highest stability for sensitive ops (Div/Softmax) but slowest speed.
+  # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
+  # 2: Balanced. Standard optimizations suitable for most CV models.
+  # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
+  optimization_level: 3  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  verbose: true
+  pruning: true
+  eval_memory: false
+
+  quantization:
+    enabled: false
+    dtype: "asymmetric_quantized-8"
+    #dataset: "./data/calibration_list-fake.txt"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5           # Use every 5th sample from the dataset for calibration
+
+models:
+  - name: "encoder"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/encoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/encoder-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+    input_shapes:
+      - [1, 80, 50]
+
+  - name: "decoder"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/decoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/decoder-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+      fix_int64_type: true
+    input_shapes:
+      - [1, 512]
+
+  - name: "joiner"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/joiner-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/joiner-epoch-99-avg-1.onnx"
+    preprocess:
+      fix_dynamic_shape: true
+      simplify: true
+      extract_metadata: true
+    input_shapes:
+      - [1, 512]
+      - [1, 512]
