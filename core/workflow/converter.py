@@ -167,15 +167,19 @@ class StandardConverter:
             logger.info(f"SUCCESS: Standard model saved to {output_path}")
 
             # Processing -- B. Verify (Verification)
-            score = self._verify_model(model_cfg, onnx_path, build_config)
-
-            # Processing -- C. Deep Analysis if Low Score
             is_quant = build_config.get('quantization', {}).get('enabled', False)
-            if is_quant and score < 0.99:
-                logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
-                dataset_path = build_config.get('quantization', {}).get('dataset')
-                analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
-                adapter.run_deep_analysis(dataset_path, analysis_dir)
+            if is_quant:
+                score = self._verify_model(model_cfg, onnx_path, build_config)
+
+                if score < 0.99:
+                    logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
+                    dataset_path = build_config.get('quantization', {}).get('dataset')
+                    analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+                    adapter.run_deep_analysis(dataset_path, analysis_dir)
+                else:
+                    logger.info(f"✅ Accuracy is good enough ({score:.4f}).")
+            else:
+                logger.info(f"🔎 Verification skipped for {model_cfg['name']} (Quantization is disabled).")
         else:
             logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
             score = 0.0

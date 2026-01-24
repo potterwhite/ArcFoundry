@@ -125,6 +125,9 @@ class PipelineEngine:
             else:
                 precision_suffix = "fp16"
 
+            # Preparation -- e. Check if quantization is enabled
+            is_quant = final_json_build.get('quantization', {}).get('enabled', False)
+
             # Construct the final output path with precision suffix
             rknn_output_name = f"{json_model_name}_{precision_suffix}.rknn"
             rknn_output_path = os.path.join(self.json_output_dir, rknn_output_name)
@@ -140,7 +143,7 @@ class PipelineEngine:
             # Processing -- d. Decision Point: If Precision is Low, Enter Recovery Flow (Level 3)
             #               Only trigger if quantization is enabled and score is low
             logger.info(f"\n===== IV. Precision Recovery =====")
-            is_quant = final_json_build.get('quantization', {}).get('enabled', False)
+
             if is_quant and score < 0.99:
                 logger.debug(f"score={score}, entering precision recovery...")
                 self.recoverer._recover_precision(json_target_platform, json_model_name, processed_onnx_path,
