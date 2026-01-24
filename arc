@@ -112,7 +112,6 @@ func_1_5_install_rknn() {
     "${PIP_BIN}" install "${whl_file}" || func_1_2_err "Failed to install RKNN Toolkit2."
 
     # 6. Install official RKNN runtime requirements matching the current Python tag
-    func_1_1_log "\nInstalling requirements.txt..."
     local requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
 
     if [ -f "${requirements_file}" ]; then
@@ -122,6 +121,10 @@ func_1_5_install_rknn() {
         # func_1_2_err "Could not find compatible requirements.txt file in: ${search_path}"
         func_1_1_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping RKNN extra requirements."
     fi
+
+    # 7. Force ONNX version compatible with RKNN Toolkit2
+    func_1_1_log "\nEnsuring ONNX version is compatible with RKNN Toolkit2 (onnx>=1.16.1,<1.19.0)..."
+    "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_2_err "Failed to install a compatible ONNX version."
 
     func_1_1_log "RKNN Toolkit2 installed successfully."
 }
