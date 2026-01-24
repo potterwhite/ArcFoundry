@@ -98,27 +98,30 @@ func_1_5_install_rknn() {
 
     # 4. Find the correct Wheel file for Python 3.x (cp3x) on x86_64
     # Pattern: rknn_toolkit2-*-cp3x-cp3x-manylinux*x86_64.whl
-    func_1_1_log "Searching for wheel package..."
+    func_1_1_log "Searching for RKNN Toolkit2 wheel package..."
     local search_path="${repo_dir}/rknn-toolkit2/packages/x86_64"
-    local requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
-    local whl_file=$(find "${search_path}" -name "rknn_toolkit2*-${WHEEL_TAG}-${WHEEL_TAG}-*x86_64.whl" | head -n 1)
+    local whl_file
+    whl_file=$(find "${search_path}" -name "rknn_toolkit2*-${WHEEL_TAG}-${WHEEL_TAG}-*x86_64.whl" | head -n 1)
 
     if [ -z "${whl_file}" ]; then
         func_1_2_err "Could not find compatible .whl file in: ${search_path}"
     fi
 
-    # 5. Install requirements.txt
-    func_1_1_log "\nInstalling requirements.txt..."
-    "${PIP_BIN}" install -r "${requirements_file}" || func_1_2_err "Failed to install requirements.txt."
-
-    # 5. Install
+    # 5. Install RKNN Toolkit2 wheel into the venv
     func_1_1_log "\nInstalling: $(basename "${whl_file}")"
     "${PIP_BIN}" install "${whl_file}" || func_1_2_err "Failed to install RKNN Toolkit2."
 
-    # # 6. Verify
-    # if ! "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
-    #     func_1_2_err "Installation completed but import failed."
-    # fi
+    # 6. Install official RKNN runtime requirements matching the current Python tag
+    func_1_1_log "\nInstalling requirements.txt..."
+    local requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
+
+    if [ -f "${requirements_file}" ]; then
+        func_1_1_log "\nInstalling: $(basename "${requirements_file}")"
+        "${PIP_BIN}" install -r "${requirements_file}" || func_1_2_err "Failed to install requirements.txt."
+    else
+        # func_1_2_err "Could not find compatible requirements.txt file in: ${search_path}"
+        func_1_1_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping RKNN extra requirements."
+    fi
 
     func_1_1_log "RKNN Toolkit2 installed successfully."
 }
@@ -153,6 +156,44 @@ func_1_6_setup_environment_vars() {
     esac
 }
 
+func_1_7_check_rknn_and_cv2() {
+    func_1_1_log "Verifying RKNN and OpenCV environment inside the venv..."
+
+    # First try with whatever is currently installed (RKNN wheel + official requirements)
+    if "${PYTHON_BIN}" - <<'EOF'
+try:
+    import rknn.api  # basic RKNN import
+    import cv2       # OpenCV import
+except Exception:
+    raise SystemExit(1)
+EOF
+    then
+        func_1_1_log "RKNN and OpenCV imports succeeded."
+        return 0
+    fi
+
+    func_1_1_log "RKNN / OpenCV import failed, trying to switch to opencv-python-headless..."
+
+    # Replace GUI OpenCV with headless OpenCV (works across Python 3.8–3.12)
+    "${PIP_BIN}" uninstall -y opencv-python || true
+    "${PIP_BIN}" install "opencv-python-headless==4.11.0.86" || func_1_2_err "Failed to install opencv-python-headless."
+
+    # Re-check after switching to headless OpenCV
+    if "${PYTHON_BIN}" - <<'EOF'
+try:
+    import rknn.api
+    import cv2
+except Exception:
+    raise SystemExit(1)
+EOF
+    then
+        func_1_1_log "RKNN and OpenCV(headless) imports succeeded."
+        return 0
+    fi
+
+    func_1_2_err "RKNN / OpenCV environment check still failed even after installing opencv-python-headless."
+}
+
 
 # ==============================================================================
 # Level 2: Environment Logic
@@ -160,7 +201,8 @@ func_1_6_setup_environment_vars() {
 func_2_1_setup_venv() {
 
     # 1. Check/Create Venv
-    if [ ! -f "${VENV_DIR}/bin/python" ]; then
+    # if [ ! -f "${VENV_DIR}/bin/python" ]; then
+    if [ ! -f "${PYTHON_BIN}" ]; then
         func_1_1_log "Initializing virtual environment..."
         # if ! command -v python3.8 &> /dev/null; then
         #     func_1_2_err "Python 3.8 not installed. Run: sudo apt install python3.8 python3.8-venv"
@@ -178,11 +220,13 @@ func_2_1_setup_venv() {
     # 3. Check Dependencies (Force check for V1.1 new deps: requests)
     #    We should run after RKNN Toolkit2 is installed to avoid conflicts.
     if ! "${PYTHON_BIN}" -c "import requests, tqdm, yaml" &> /dev/null; then
-        func_1_1_log "\nInstalling/Updating Our own dependencies..."
+        func_1_1_log "\nInstalling/Updating project dependencies from envs/requirements.txt ..."
         "${PIP_BIN}" install -r "${SDK_ROOT}/envs/requirements.txt"
     fi
-}
 
+    # 4. Validate RKNN + OpenCV stack, and auto-switch to headless OpenCV when needed
+    func_1_7_check_rknn_and_cv2
+}
 
 func_2_2_clean() {
     rm -rf "${SDK_ROOT}/workspace" "${SDK_ROOT}/output"
