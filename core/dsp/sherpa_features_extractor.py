@@ -31,7 +31,7 @@ class SherpaFeatureExtractor:
         that of the C++ runtime.
     """
 
-    def __init__(self, sample_rate=16000, n_mels=80):
+    def __init__(self, time_frames=71, sample_rate=16000, n_mels=80):
         # Standard parameters of Sherpa feature extraction
         self.sample_rate = sample_rate
         self.n_fft = 400
@@ -45,6 +45,8 @@ class SherpaFeatureExtractor:
         self.preemph_coeff = 0.97
         self.log_zero_guard = 1e-10
 
+        self.frames = time_frames
+
     def compute(self, audio_path: str) -> np.ndarray:
         """
         Description:
@@ -53,7 +55,7 @@ class SherpaFeatureExtractor:
         """
         try:
             # 1. Load Audio
-            #    Resampling 
+            #    Resampling
             waveform, _ = librosa.load(audio_path, sr=self.sample_rate)
 
             # 2. Dithering
@@ -83,7 +85,18 @@ class SherpaFeatureExtractor:
             log_mel = np.log(np.maximum(mel, self.log_zero_guard))
 
             # 7. Transpose to [Time, Feature]
-            return log_mel.T.astype(np.float32)
+            feats = log_mel.T.astype(np.float32)
+
+            # 8. Pad to target frames
+            T, F = feats.shape
+
+            if T > self.frames:
+                feats = feats[:self.frames, :]
+            elif T < self.frames:
+                pad = np.zeros((self.frames - T, F), dtype=feats.dtype)
+                feats = np.concatenate([feats, pad], axis=0)
+
+            return feats
 
         except Exception as e:
             logging.error(f"[DSP] Feature extraction failed for {audio_path}: {e}")

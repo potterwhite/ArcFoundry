@@ -60,6 +60,25 @@ class SmartNewlineFormatter(logging.Formatter):
         # Default behavior for messages without leading newlines
         return super().format(record)
 
+def get_btf_from_yaml(cfg, model_name="encoder"):
+    models = cfg.get("models", [])
+
+    for model in models:
+        if model.get("name") == model_name:
+            input_shapes = model.get("input_shapes", [])
+            if not input_shapes:
+                raise ValueError(f"{model_name} has no input_shapes")
+
+            # 默认取第一个输入
+            shape = input_shapes[0]
+
+            if len(shape) != 3:
+                raise ValueError(f"Expect shape [B, T, F], got {shape}")
+
+            B, T, F = shape
+            return B, T, F
+
+    raise ValueError(f"Model {model_name} not found in yaml")
 
 # Global logger instance
 logger = logging.getLogger("ArcFoundry")

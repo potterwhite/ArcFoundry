@@ -33,7 +33,7 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 3  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  optimization_level: 0  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
   verbose: true
   pruning: true
   eval_memory: false
@@ -54,7 +54,8 @@ models:
       simplify: true
       extract_metadata: true
     input_shapes:
-      - [1, 80, 50]
+      # [batch=1, frames=71, features=80] comes from the inspection of the rknn from sherpa-onnx official
+      - [1, 71, 80]
 
   - name: "decoder"
     path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/decoder-epoch-99-avg-1.onnx"
