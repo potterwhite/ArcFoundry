@@ -21,7 +21,7 @@
 import os
 import numpy as np
 import onnxruntime as ort
-from core.utils import logger, get_btf_from_yaml
+from core.utils.utils import logger, get_btf_from_yaml
 from core.rknn_adapter import RKNNAdapter
 from core.verification.comparator import ModelComparator
 from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor

@@ -24,7 +24,7 @@ import os
 import copy
 import json
 import sys
-from core.utils import logger, timed_input
+from core.utils.utils import logger, timed_input
 from core.quantization.calibrator import CalibrationGenerator
 
 

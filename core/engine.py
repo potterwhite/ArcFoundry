@@ -20,9 +20,9 @@
 
 import os
 import yaml
-from core.utils import logger, ensure_dir, cleanup_garbage
-from core.preprocessor import Preprocessor
-from core.downloader import ModelDownloader
+from core.utils.utils import logger, ensure_dir, cleanup_garbage
+from core.workflow.preprocessor import Preprocessor
+from core.utils.downloader import ModelDownloader
 from core.quantization.configurator import QuantizationConfigurator
 from core.workflow.converter import StandardConverter
 from core.workflow.recoverer import PrecisionRecoverer

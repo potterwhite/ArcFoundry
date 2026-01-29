@@ -25,7 +25,7 @@ import numpy as np
 import onnxruntime as ort
 from pathlib import Path
 from tqdm import tqdm
-from core.utils import logger, ensure_dir, get_btf_from_yaml
+from core.utils.utils import logger, ensure_dir, get_btf_from_yaml
 from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
 from . import register_strategy
 

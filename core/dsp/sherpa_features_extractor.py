@@ -89,12 +89,15 @@ class SherpaFeatureExtractor:
 
             # 8. Pad to target frames
             T, F = feats.shape
+            logger.info(f"[DSP] Features shape: {T}, {F}")
 
             if T > self.frames:
                 feats = feats[:self.frames, :]
+                logger.info(f"[DSP] Features shape contruncated after padding: {feats.shape}")
             elif T < self.frames:
                 pad = np.zeros((self.frames - T, F), dtype=feats.dtype)
                 feats = np.concatenate([feats, pad], axis=0)
+                logger.info(f"[DSP] Features shape padded after padding: {feats.shape}")
 
             return feats
 

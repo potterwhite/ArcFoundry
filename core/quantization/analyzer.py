@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 import os
-from core.utils import logger, ensure_dir
+from core.utils.utils import logger, ensure_dir
 
 
 class QuantizationAnalyzer:

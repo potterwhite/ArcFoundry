@@ -23,7 +23,7 @@ import onnxsim
 import onnxruntime
 import os
 from core.quantization import strategies
-from core.utils import logger
+from core.utils.utils import logger
 
 
 class Preprocessor:
