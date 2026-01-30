@@ -26,7 +26,7 @@ import time
 
 
 def main():
-    start_time = time.perf_counter()
+    # start_time = time.perf_counter()
     parser = argparse.ArgumentParser(description="ArcFoundry Core Engine")
     parser.add_argument('-c', '--config', required=True, help="Path to YAML configuration file")
     args = parser.parse_args()
@@ -43,10 +43,10 @@ def main():
         logger.exception(f"An unexpected error occurred in the kernel: {e}")
         sys.exit(1)
 
-    end_time = time.perf_counter()
-    elapsed = end_time - start_time
-    minutes, seconds = divmod(elapsed, 60)
-    logger.info(f"Total execution time: {int(minutes)} minutes and {seconds:.2f} seconds")
+    # end_time = time.perf_counter()
+    # elapsed = end_time - start_time
+    # minutes, seconds = divmod(elapsed, 60)
+    # logger.info(f"Total execution time: {int(minutes)} minutes and {seconds:.2f} seconds")
 
 
 if __name__ == "__main__":
