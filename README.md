@@ -153,7 +153,8 @@ ArcFoundry is based on the `rknn-toolkit2` kernel and theoretically supports all
 
 | Chip Series | Status | Remarks |
 | :--- | :--- | :--- |
-| **RV1126B / RV1109B** | ✅ Verified | Initial validation platform (Sherpa-Zipformer) |
+| **RV1126B** | ✅ Verified | Initial validation platform (Sherpa-Zipformer) |
+| **RK3588S** | ✅ Verified |  |
 | **Other RK Series** | ⏳ Pending | Theoretically supported as long as rknn-toolkit2 supports them |
 
 #### How to support a new platform?
