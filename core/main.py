@@ -20,7 +20,7 @@
 
 import argparse
 import sys
-from core.utils import setup_logging, logger
+from core.utils.utils import setup_logging, logger
 from core.engine import PipelineEngine
 import time
 

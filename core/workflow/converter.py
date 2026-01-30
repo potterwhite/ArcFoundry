@@ -21,7 +21,7 @@
 import os
 import numpy as np
 import onnxruntime as ort
-from core.utils import logger
+from core.utils.utils import logger, get_btf_from_yaml
 from core.rknn_adapter import RKNNAdapter
 from core.verification.comparator import ModelComparator
 from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
@@ -32,6 +32,7 @@ class StandardConverter:
     def __init__(self, global_config):
         self.cfg = global_config
         self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
@@ -59,7 +60,7 @@ class StandardConverter:
             # 2. Prepare Input Data
             sess = ort.InferenceSession(onnx_path)
             input_feed = {}
-            extractor = SherpaFeatureExtractor()
+            extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames, sample_rate=16000, n_mels=self.json_feature)
 
             test_audio_path = self.cfg.get("build", {}).get("test_input", None)
 
@@ -167,15 +168,19 @@ class StandardConverter:
             logger.info(f"SUCCESS: Standard model saved to {output_path}")
 
             # Processing -- B. Verify (Verification)
-            score = self._verify_model(model_cfg, onnx_path, build_config)
-
-            # Processing -- C. Deep Analysis if Low Score
             is_quant = build_config.get('quantization', {}).get('enabled', False)
-            if is_quant and score < 0.99:
-                logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
-                dataset_path = build_config.get('quantization', {}).get('dataset')
-                analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
-                adapter.run_deep_analysis(dataset_path, analysis_dir)
+            if is_quant:
+                score = self._verify_model(model_cfg, onnx_path, build_config)
+
+                if score < 0.99:
+                    logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
+                    dataset_path = build_config.get('quantization', {}).get('dataset')
+                    analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+                    adapter.run_deep_analysis(dataset_path, analysis_dir)
+                else:
+                    logger.info(f"✅ Accuracy is good enough ({score:.4f}).")
+            else:
+                logger.info(f"🔎 Verification skipped for {model_cfg['name']} (Quantization is disabled).")
         else:
             logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
             score = 0.0

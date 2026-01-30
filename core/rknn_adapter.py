@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 from rknn.api import RKNN
-from core.utils import logger
+from core.utils.utils import logger
 import os
 import json
 import re
