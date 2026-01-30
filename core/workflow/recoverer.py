@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 import os
-from core.utils import logger, timed_input
+from core.utils.utils import logger, timed_input
 from core.rknn_adapter import RKNNAdapter
 
 
