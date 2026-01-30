@@ -60,6 +60,7 @@ class SmartNewlineFormatter(logging.Formatter):
         # Default behavior for messages without leading newlines
         return super().format(record)
 
+
 def get_btf_from_yaml(cfg, model_name="encoder"):
     models = cfg.get("models", [])
 
@@ -78,6 +79,7 @@ def get_btf_from_yaml(cfg, model_name="encoder"):
             return B, T, F
 
     raise ValueError(f"Model {model_name} not found in yaml")
+
 
 # Global logger instance
 logger = logging.getLogger("ArcFoundry")
@@ -141,6 +143,7 @@ def cleanup_garbage(target_dir=".", patterns=None):
 
     if 'logger' in globals():
         logger.info(f"\n🧹 Cleanup complete.\n")
+
 
 def get_sdk_version():
     """

@@ -43,7 +43,6 @@ class QuantizationConfigurator:
         self.cfg = global_config
         self.workspace_dir = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
 
-
     def _handle_fallback(self, reason):
         """
         Handles the missing dataset situation:
@@ -54,10 +53,7 @@ class QuantizationConfigurator:
         # Preparation -- 1. Define local variables
         timeout = 30
         msg = [
-            "\n" + "!" * 60,
-            "!!! QUANTIZATION DATASET MISSING !!!",
-            "!" * 60,
-            f"Reason : {reason}",
+            "\n" + "!" * 60, "!!! QUANTIZATION DATASET MISSING !!!", "!" * 60, f"Reason : {reason}",
             "!" * 60 + "\n"
         ]
 
