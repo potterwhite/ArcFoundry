@@ -7,10 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0](https://github.com/potterwhite/ArcFoundry/compare/v0.8.0...v0.9.0) (2026-01-30)
 
-
 ### ✨ Added
 
+* Added support for **multiple Python versions (3.8–3.12)** with automatic detection of the host Python interpreter.
+* Introduced **automatic RKNN toolkit setup**, including ABI-aware wheel selection to match the active Python version.
+* Added **RK3588_sherpa.yaml** for zipformer build configuration, verified on evaluation hardware.
+
+---
+
+### 🔧 Changed
+
+* Refactored the bash launcher into a **layered execution workflow** with automatic recovery from common setup failures, including:
+
+  * Python interpreter fallback when the default `python3` is unavailable.
+  * Automatic installation of the RKNN toolkit when missing.
+  * Dynamic selection of RKNN wheels based on Python ABI.
+  * Graceful handling of OpenCV GUI dependencies by falling back to headless builds.
+* Made the feature extractor **time-frame configuration explicit and YAML-driven**, ensuring deterministic alignment with model input shapes.
+* Reorganized the **core workflow and utility module structure** to improve maintainability and separation of concerns.
+
+---
+
+### ⚙️ Improved
+
+* Improved robustness of the build and conversion pipeline on heterogeneous host environments (desktop, server, and containerized setups).
+* Reduced manual environment setup steps by embedding common recovery logic directly into the launcher scripts.
+
+---
+
+### 🧪 Conditional Behavior
+
+* Skipped automated accuracy verification when **quantization is disabled**, avoiding unnecessary validation steps in non-quantized builds.
+
+---
+
+### 📝 Notes
+
+* This release introduces significant internal refactoring and build-system enhancements while remaining backward compatible with existing workflows.
+* No user-facing API changes are required.
+
+
 * **build:** add multi-python (3.8–3.12) support and RKNN auto-setup ([4709e9f](https://github.com/potterwhite/ArcFoundry/commit/4709e9fdcbf512df1559a85cc9c702374a81cf95))
+
+---
 
 ## [0.8.0](https://github.com/potterwhite/ArcFoundry/compare/v0.7.0...v0.8.0) (2026-01-23)
 
