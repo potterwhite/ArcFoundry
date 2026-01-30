@@ -47,7 +47,9 @@ class StreamingAudioStrategy:
         # Default sampling interval: save data every 5 frames
         self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
         _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
-        self.sherpa_extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames, sample_rate=16000, n_mels=self.json_feature)
+        self.sherpa_extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames,
+                                                       sample_rate=16000,
+                                                       n_mels=self.json_feature)
 
     def _load_audio_list(self, dataset_path):
         if not os.path.exists(dataset_path):

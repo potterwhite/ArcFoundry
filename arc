@@ -2,27 +2,44 @@
 
 # set -xe
 
+# Preparation -- 1. Define Most Important Timers
+# __ELAPSED_TIME=
+__START_TIME=
+__SECOND_STAGE_BUILD_START_TIME=
+
 # ==============================================================================
 # Level 1: Helpers
 # ==============================================================================
-func_1_1_log() { echo -e "\033[1;32m[ArcFoundry]\033[0m $1"; }
-func_1_2_err() { echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1; }
+func_1_1_log() {
+    echo -e "\033[1;32m[ArcFoundry]\033[0m $1";
+}
+func_1_2_err() {
+    echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1;
+}
+func_1_3_debug() {
+    # echo "DEBUG_MODE=${DEBUG_MODE}"
+    if [ "${DEBUG_MODE:-0}" -ne 1 ]; then
+        return
+    fi
+    echo -e "\033[1;33m[Debug]\033[0m $1";
+}
 
-func_1_3_get_python_version() {
+func_1_13_get_python_version() {
     # Description:
     #   1. Define a helper function to check if a given python command meets version requirements (3.8 <= v <= 3.12)
     # Returns:
     #   0 if valid, 1 if invalid
+
     _check_py_validity() {
         local py_cmd="$1"
 
-        # 1. 检查命令是否存在
+        # 1. Check if command exists
         if ! command -v "$py_cmd" &>/dev/null; then
             return 1
         fi
 
-        # 2. 使用 python 自身来判断版本号
-        # 逻辑：major必须是3，minor必须在8到12之间
+        # 2. Utilize Python to check version
+        # Logic: major must be 3, minor must be between 8 and 12 inclusive
         "$py_cmd" -c "import sys; v=sys.version_info; sys.exit(0 if (v.major == 3 and 8 <= v.minor <= 12) else 1)" 2>/dev/null
         return $?
     }
@@ -130,7 +147,18 @@ func_1_5_install_rknn() {
 }
 
 func_1_6_setup_environment_vars() {
+    if [ "$V" = "1" ]; then
+        DEBUG_MODE="1"
+    fi
 
+    # Processing -- 1. start timer
+    func_1_9_start_time_count __START_TIME
+    # func_1_1_log "Environment setup started at ${__START_TIME}."
+
+    # Preparation -- 2. Ensure Finalization on Exit
+    trap func_2_4_finalize EXIT
+
+    # Preparation -- 3. Define Important Paths
     SDK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     VENV_DIR="${SDK_ROOT}/.venv"
     CONFIG_DIR="${SDK_ROOT}/configs"
@@ -139,7 +167,7 @@ func_1_6_setup_environment_vars() {
     RK_REPOS_DIR="${SDK_ROOT}/rockchip-repos"
 
     # 1. Determine Venv Python Binary and Version
-    PYTHON_BIN_NAME=$(func_1_3_get_python_version)
+    PYTHON_BIN_NAME=$(func_1_13_get_python_version)
     PYTHON_BIN="${VENV_DIR}/bin/python"
     PIP_BIN="${VENV_DIR}/bin/pip"
 
@@ -195,6 +223,62 @@ EOF
     fi
 
     func_1_2_err "RKNN / OpenCV environment check still failed even after installing opencv-python-headless."
+}
+
+func_1_8_get_current_milliseconds() {
+    date +%s%3N
+}
+
+# start timer: $1 = variable name to store start time
+func_1_9_start_time_count() {
+    local -n _timer_ref=$1
+    # _timer_ref=$(date +%s)
+    _timer_ref="$(func_1_8_get_current_milliseconds)"
+}
+
+# format duration from milliseconds to human readable string
+# $1 = milliseconds
+# $2 = variable name to store formatted result
+func_1_10_format_duration_ms() {
+    local ms=$1
+    local -n _out_ref=$2
+
+    if (( ms < 1000 )); then
+        _out_ref="${ms} ms"
+        return
+    fi
+
+    if (( ms < 60000 )); then
+        # seconds with 2 decimal places
+        _out_ref=$(printf "%.2f seconds" "$(awk "BEGIN { print $ms / 1000 }")")
+        return
+    fi
+
+    # minutes + seconds
+    local total_seconds minutes remaining_ms
+    total_seconds=$(( ms / 1000 ))
+    minutes=$(( total_seconds / 60 ))
+    remaining_ms=$(( ms % 60000 ))
+
+    _out_ref=$(printf "%d minutes %.2f seconds" \
+        "$minutes" \
+        "$(awk "BEGIN { print $remaining_ms / 1000 }")")
+}
+
+# finalize timer:
+# $1 = start time variable
+# $2 = end time variable
+# $3 = the variable name to store formatted elapsed time string
+func_1_11_elapsed_time_calculation() {
+    local start_time=$1
+    local end_time=$2
+    local -n elapsed_string_ref=$3
+
+    # func_1_1_log "\$1=$1 ; \$2=$2; \$3=$3"
+
+    local elapsed_time=$((end_time - start_time))
+
+    func_1_10_format_duration_ms "${elapsed_time}" elapsed_string_ref
 }
 
 
@@ -257,6 +341,29 @@ func_2_3_distclean() {
     func_1_1_log "Rockchip repositories removed."
 }
 
+func_2_4_finalize() {
+    local exit_code=$?
+    local final_time=$(func_1_8_get_current_milliseconds)
+
+    if [[ -n "${__START_TIME:-}" ]]; then
+
+        # Processing -- 1. second stage build time statistics
+        if [[ ! -z "${__SECOND_STAGE_BUILD_START_TIME:-}" ]]; then
+            local second_duration_human
+            func_1_11_elapsed_time_calculation "${__SECOND_STAGE_BUILD_START_TIME}" "${final_time}" second_duration_human
+            func_1_1_log "Build elapsed time: ${second_duration_human}."
+        fi
+
+        # Processing -- 2. total elapsed time statistics
+        local whole_duration_human
+        func_1_11_elapsed_time_calculation "${__START_TIME}" "${final_time}" whole_duration_human
+        func_1_1_log "Total elapsed time: ${whole_duration_human}."
+    else
+        func_1_1_log "Elapsed time information not available."
+    fi
+
+    exit "$exit_code"
+}
 
 # ==============================================================================
 # Level 3:
@@ -312,13 +419,13 @@ func_3_2_launch_kernel() {
     fi
     func_1_1_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
-    # [新增] 选好配置后，才开始检查环境（实现 Lazy Check）
     func_2_1_setup_venv || return 1
 
+    func_1_9_start_time_count __SECOND_STAGE_BUILD_START_TIME
     export PYTHONPATH="${SDK_ROOT}"
     #exec "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
     "${PYTHON_BIN}" "${SDK_ROOT}/core/main.py" -c "${SELECTED_CONFIG}"
-    local py_ret=$?  # <--- 这行是之前缺失的，必须紧跟在 python 命令后面
+    local py_ret=$?
 
     # --- Post-Execution Cleanup (The Shield) ---
     # Move RKNN generated intermediate files to workspace instead of littering root
@@ -358,19 +465,20 @@ func_4_2_mode_direct() {
 # Main Entry Point (The Router)
 # ==============================================================================
 main() {
-    # 1. Setup Env Vars
+    # Preparation -- 2. Setup Env Vars
     func_1_6_setup_environment_vars
 
-    # Pre-setup: Ensure log dir exists
+    # Preparation -- 3. Ensure log dir exists
     mkdir -p "${LOG_DIR}"
 
-    # Route by Argument Count
+    # Processing -- 1. Interactive Mode
     if [ $# -eq 0 ]; then
         # No arguments: Enter Mode 1 (Interactive)
         func_4_1_mode_menu || exit
         exit 0
     fi
 
+    # Processing -- 2. Direct Mode
     if [ $# -eq 1 ]; then
         # One argument: Check if it's a command or a config
         case "$1" in
@@ -383,7 +491,7 @@ main() {
         exit 0
     fi
 
-    # Fallback for Legacy calls (e.g. `./start.sh convert -c ...`)
+    # Processing -- 3. Fallback for Legacy calls (e.g. `./start.sh convert -c ...`)
     if [ "$1" == "convert" ] && [ "$2" == "-c" ] && [ -n "$3" ]; then
         func_4_2_mode_direct "$3"
     elif [ "$1" == "convert" ] && [ -n "$2" ]; then

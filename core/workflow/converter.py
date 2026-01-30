@@ -60,7 +60,9 @@ class StandardConverter:
             # 2. Prepare Input Data
             sess = ort.InferenceSession(onnx_path)
             input_feed = {}
-            extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames, sample_rate=16000, n_mels=self.json_feature)
+            extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames,
+                                               sample_rate=16000,
+                                               n_mels=self.json_feature)
 
             test_audio_path = self.cfg.get("build", {}).get("test_input", None)
 
@@ -173,7 +175,8 @@ class StandardConverter:
                 score = self._verify_model(model_cfg, onnx_path, build_config)
 
                 if score < 0.99:
-                    logger.warning(f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
+                    logger.warning(
+                        f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
                     dataset_path = build_config.get('quantization', {}).get('dataset')
                     analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
                     adapter.run_deep_analysis(dataset_path, analysis_dir)
