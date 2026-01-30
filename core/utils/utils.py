@@ -69,7 +69,6 @@ def get_btf_from_yaml(cfg, model_name="encoder"):
             if not input_shapes:
                 raise ValueError(f"{model_name} has no input_shapes")
 
-            # 默认取第一个输入
             shape = input_shapes[0]
 
             if len(shape) != 3:
@@ -143,14 +142,13 @@ def cleanup_garbage(target_dir=".", patterns=None):
     if 'logger' in globals():
         logger.info(f"\n🧹 Cleanup complete.\n")
 
-
 def get_sdk_version():
     """
     Simple parser to get version from pyproject.toml (SSOT).
     """
     try:
         # Locate project root (assuming core/utils.py is in core/)
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         toml_path = os.path.join(root_dir, "pyproject.toml")
 
         if os.path.exists(toml_path):
