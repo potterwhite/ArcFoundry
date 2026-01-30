@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.0](https://github.com/potterwhite/ArcFoundry/compare/v0.9.1...v0.10.0) (2026-01-30)
 
-
-### ✨ Added
-
 * **arc:** add build timing and fix sdk version resolving ([#21](https://github.com/potterwhite/ArcFoundry/issues/21)) ([d356bd9](https://github.com/potterwhite/ArcFoundry/commit/d356bd98f5ff922dacc846668e1fb7ce471a57d4))
+
+### Added
+- Add millisecond-level build timing in `arc`, including second-stage build statistics
+- Report total and stage-specific elapsed time on process exit via finalize hook
+- Introduce debug logging support enabled by `V=1`
+
+### Fixed
+- Fix incorrect SDK version retrieval caused by `utils.py` relocation
+- Correct project root detection logic for locating `pyproject.toml`
+
+### Changed
+- Move execution time measurement responsibility from Python layer to bash
+- Remove duplicate Python-side timing logs to avoid inconsistent reporting
+
+### Style
+- Apply `yapf` formatting across quantization, workflow, and utils modules
+- Minor readability and line-wrapping improvements
+
+---
 
 ## [0.9.1](https://github.com/potterwhite/ArcFoundry/compare/v0.9.0...v0.9.1) (2026-01-30)
 
