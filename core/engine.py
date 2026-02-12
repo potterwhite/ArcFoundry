@@ -105,7 +105,9 @@ class PipelineEngine:
             #    To do many operations with the original model and return the processed onnx model path back
             logger.info(f"\n===== I. Preprocessing =====")
             processed_onnx_path, custom_string = module_preprocessor.preprocess(
+                json_model_name,
                 json_model_path,
+                json_input_shapes,
                 processed_onnx_path,
                 json_strategies,
             )

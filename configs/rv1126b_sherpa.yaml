@@ -53,6 +53,7 @@ models:
       fix_dynamic_shape: true
       simplify: true
       extract_metadata: true
+      strict_override: false
     input_shapes:
       - [1, 80, 50]
 
@@ -64,6 +65,7 @@ models:
       simplify: true
       extract_metadata: true
       fix_int64_type: true
+      strict_override: false
     input_shapes:
       - [1, 512]
 
@@ -74,6 +76,7 @@ models:
       fix_dynamic_shape: true
       simplify: true
       extract_metadata: true
+      strict_override: false
     input_shapes:
       - [1, 512]
       - [1, 512]

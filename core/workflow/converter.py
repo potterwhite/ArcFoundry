@@ -21,7 +21,8 @@
 import os
 import numpy as np
 import onnxruntime as ort
-from core.utils.utils import logger, get_btf_from_yaml
+# from core.utils.utils import logger, get_btf_from_yaml
+from core.utils.utils import logger, get_input_signature_from_yaml
 from core.rknn_adapter import RKNNAdapter
 from core.verification.comparator import ModelComparator
 from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
@@ -32,7 +33,25 @@ class StandardConverter:
     def __init__(self, global_config):
         self.cfg = global_config
         self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
-        _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
+        # ************************
+        # Handle input signature
+        # _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
+        self.input_signature = get_input_signature_from_yaml(self.cfg)
+
+        sig_info = self.input_signature.as_dict()
+
+        if sig_info["type"] == "ASR":
+            self.json_time_frames = sig_info["time"]
+            self.json_feature = sig_info["feature"]
+
+        elif sig_info["type"] == "CV":
+            self.json_height = sig_info["height"]
+            self.json_width = sig_info["width"]
+
+        else:
+            raise ValueError("Unsupported model input type.")
+        # ************************
+
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):

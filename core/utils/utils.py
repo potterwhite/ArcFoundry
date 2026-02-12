@@ -23,6 +23,7 @@ import sys
 import os
 import glob
 import select
+from core.utils.input_signature import InputSignature
 
 
 # 1. Define the Custom Formatter
@@ -61,24 +62,52 @@ class SmartNewlineFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_btf_from_yaml(cfg, model_name="encoder"):
+# def get_btf_from_yaml(cfg, model_name="encoder"):
+#     models = cfg.get("models", [])
+
+#     for model in models:
+#         if model.get("name") == model_name:
+#             input_shapes = model.get("input_shapes", [])
+#             if not input_shapes:
+#                 raise ValueError(f"{model_name} has no input_shapes")
+
+#             shape = input_shapes[0]
+
+#             if len(shape) != 3:
+#                 raise ValueError(f"Expect shape [B, T, F], got {shape}")
+
+#             B, T, F = shape
+#             return B, T, F
+
+#     raise ValueError(f"Model {model_name} not found in yaml")
+
+
+def get_input_signature_from_yaml(cfg, model_name=None):
+    """
+    Extract input signature from YAML config.
+    If model_name is None, use the first model.
+    """
+
     models = cfg.get("models", [])
 
-    for model in models:
-        if model.get("name") == model_name:
-            input_shapes = model.get("input_shapes", [])
-            if not input_shapes:
-                raise ValueError(f"{model_name} has no input_shapes")
+    if not models:
+        raise ValueError("No models found in YAML.")
 
-            shape = input_shapes[0]
+    # If model_name specified, filter it
+    if model_name:
+        models = [m for m in models if m.get("name") == model_name]
+        if not models:
+            raise ValueError(f"Model {model_name} not found in YAML.")
 
-            if len(shape) != 3:
-                raise ValueError(f"Expect shape [B, T, F], got {shape}")
+    model = models[0]
 
-            B, T, F = shape
-            return B, T, F
+    input_shapes = model.get("input_shapes", [])
+    if not input_shapes:
+        raise ValueError(f"Model {model.get('name')} has no input_shapes.")
 
-    raise ValueError(f"Model {model_name} not found in yaml")
+    shape = input_shapes[0]
+
+    return InputSignature(shape)
 
 
 # Global logger instance
