@@ -87,6 +87,7 @@ class PipelineEngine:
             json_strategies = json_model.get("preprocess", {})
             # rknn_output_path = os.path.join(self.json_output_dir, f"{json_model_name}.rknn")
             json_input_shapes = json_model.get('input_shapes', None)
+            json_normalization = json_model.get("normalization", None)
 
             # Preparation -- b. Echo helper info
             logger.info(f"\n>>> Processing Model: {json_model_name}")
@@ -140,7 +141,7 @@ class PipelineEngine:
             logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
             score = self.converter.convert_and_evaluate(
                 json_target_platform, json_model_name, processed_onnx_path, rknn_output_path,
-                json_input_shapes, final_json_build, custom_string, json_model)
+                json_input_shapes, final_json_build, custom_string, json_model, json_normalization)
 
             # Processing -- d. Decision Point: If Precision is Low, Enter Recovery Flow (Level 3)
             #               Only trigger if quantization is enabled and score is low

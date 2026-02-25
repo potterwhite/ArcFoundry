@@ -156,7 +156,7 @@ class StandardConverter:
     # Level 2: Standard Conversion & Evaluation
     # --------------------------------------------------------------------------
     def convert_and_evaluate(self, target_plat, model_name, onnx_path, output_path, input_shapes,
-                             build_config, custom_string, model_cfg):
+                             build_config, custom_string, model_cfg, json_normalization=None):
         """
         Description:
             This function handles a standard conversion process and returns an accuracy score.
@@ -182,7 +182,7 @@ class StandardConverter:
         adapter = RKNNAdapter(target_platform=target_plat, verbose=build_config.get('verbose', False))
 
         # Processing -- A. Convert
-        ret = adapter.convert(onnx_path, output_path, input_shapes, build_config, custom_string)
+        ret = adapter.convert(onnx_path, output_path, input_shapes, build_config, custom_string, json_normalization)
         score = 1.0
 
         if ret:
