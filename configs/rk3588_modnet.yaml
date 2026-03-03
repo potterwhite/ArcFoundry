@@ -58,5 +58,6 @@ models:
       mean_values: [[127.5, 127.5, 127.5]]
       std_values: [[127.5, 127.5, 127.5]]
     input_shapes:
-      - [1, 3, 512, 896]  # Assuming standard input shape (1 image, 3 channels, 224x224 size). Adjust this based on the actual input shape of your modnet model.
-      # You should replace this shape based on your modnet model's expected input dimensions.
+      - [1, 3, 512, 512]  # Fixed 512x512 size for optimal NPU multi-core scheduling.
+                          # Non-standard sizes like 512x896 cause multi-core scheduling failures,
+                          # forcing layers to run on single core instead of 3-core parallel mode.
