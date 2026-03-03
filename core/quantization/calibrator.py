@@ -27,7 +27,7 @@ from core.utils.utils import logger
 from core.quantization.strategies import get_strategy_class
 # NOTE: Importing the module below triggers the @register_strategy decorator
 import core.quantization.strategies.streaming
-# Future: import core.quantization.strategies.vision
+import core.quantization.strategies.vision
 
 
 class CalibrationGenerator:
@@ -43,14 +43,13 @@ class CalibrationGenerator:
         Args:
             config (dict): Global configuration.
             model_type (str, optional): Explicit strategy name.
-                                        If None, defaults to 'streaming_audio' (Backward Compatibility).
+                                        If None, auto-detects based on model name.
         """
         self.cfg = config
 
-        # Determine strategy: passed arg > config > default
-        # You can add a 'type' field in your YAML under 'models' later.
+        # Determine strategy: passed arg > auto-detection > default
         if not model_type:
-            model_type = 'streaming_audio'
+            model_type = self._auto_detect_model_type()
 
         self.model_type = model_type
 
@@ -58,10 +57,46 @@ class CalibrationGenerator:
         try:
             strategy_cls = get_strategy_class(self.model_type)
             self.strategy = strategy_cls(config)
-            logger.debug(f"Initialized Calibration Strategy: {self.model_type}")
+            logger.info(f"✅ Initialized Calibration Strategy: {self.model_type}")
         except ValueError as e:
             logger.error(str(e))
             raise
+
+    def _auto_detect_model_type(self):
+        """
+        Auto-detect model type based on model name in config.
+
+        Returns:
+            str: Strategy name ('vision' or 'streaming_audio')
+        """
+        models = self.cfg.get('models', [])
+        if not models:
+            logger.warning("No models found in config, defaulting to 'streaming_audio'")
+            return 'streaming_audio'
+
+        model_name = models[0].get('name', '').lower()
+
+        # CV model keywords
+        cv_keywords = ['modnet', 'yolo', 'resnet', 'mobilenet', 'efficientnet',
+                       'segmentation', 'detection', 'classification', 'matting']
+
+        # ASR model keywords
+        asr_keywords = ['encoder', 'decoder', 'joiner', 'sherpa', 'zipformer',
+                        'transducer', 'conformer', 'asr']
+
+        # Check for CV models
+        if any(keyword in model_name for keyword in cv_keywords):
+            logger.info(f"Auto-detected CV model: {model_name} -> using 'vision' strategy")
+            return 'vision'
+
+        # Check for ASR models
+        if any(keyword in model_name for keyword in asr_keywords):
+            logger.info(f"Auto-detected ASR model: {model_name} -> using 'streaming_audio' strategy")
+            return 'streaming_audio'
+
+        # Default to vision for unknown models
+        logger.warning(f"Unknown model type: {model_name}, defaulting to 'vision' strategy")
+        return 'vision'
 
     def _check_cache(self, list_file_path):
         """Simple smoke test to see if calibration data exists."""
