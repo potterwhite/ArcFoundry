@@ -25,7 +25,8 @@ import numpy as np
 import onnxruntime as ort
 from pathlib import Path
 from tqdm import tqdm
-from core.utils.utils import logger, ensure_dir, get_btf_from_yaml
+# from core.utils.utils import logger, ensure_dir, get_btf_from_yaml
+from core.utils.utils import logger, ensure_dir, get_input_signature_from_yaml
 from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
 from . import register_strategy
 
@@ -46,7 +47,25 @@ class StreamingAudioStrategy:
         self.cfg = config
         # Default sampling interval: save data every 5 frames
         self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
-        _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
+
+        # ************************
+        # Handle input signature
+        # _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
+        self.input_signature = get_input_signature_from_yaml(self.cfg)
+
+        sig_info = self.input_signature.as_dict()
+
+        if sig_info["type"] == "ASR":
+            self.json_time_frames = sig_info["time"]
+            self.json_feature = sig_info["feature"]
+
+        elif sig_info["type"] == "CV":
+            self.json_height = sig_info["height"]
+            self.json_width = sig_info["width"]
+
+        else:
+            raise ValueError("Unsupported model input type.")
+        # ************************
         self.sherpa_extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames,
                                                        sample_rate=16000,
                                                        n_mels=self.json_feature)

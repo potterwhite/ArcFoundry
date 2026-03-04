@@ -112,8 +112,10 @@ class QuantizationConfigurator:
             return json_build_duplicate
 
         # Preparation -- 3. Check validity based on model name
-        if "encoder" not in model_name.lower():
-            # Other models (decoder, joiner) utilize fp16 only
+        # For ASR models: only encoder supports INT8, decoder/joiner use FP16
+        # For other models (CV models like modnet): allow INT8 quantization
+        if "decoder" in model_name.lower() or "joiner" in model_name.lower():
+            # ASR decoder/joiner models utilize fp16 only
             json_build_duplicate['quantization']['enabled'] = False
             return json_build_duplicate
 

@@ -38,7 +38,7 @@ class RKNNAdapter:
         self.rknn = RKNN(verbose=self.verbose)
         logger.info(f"RKNN Toolkit initialized for target: {self.target}")
 
-    def config(self, config_dict, custom_string=None):
+    def config(self, config_dict, custom_string=None, json_normalization=None):
         """
         Independent configuration method.
         """
@@ -49,6 +49,17 @@ class RKNNAdapter:
             "optimization_level": config_dict.get('optimization_level', 3),
             "custom_string": custom_string,
         }
+
+
+        # === Load Normalization configs ===
+        if json_normalization:
+            logger.info(f"   Using Custom Normalization: {json_normalization}")
+
+            if 'mean_values' in json_normalization:
+                rknn_config_args['mean_values'] = json_normalization['mean_values']
+            if 'std_values' in json_normalization:
+                rknn_config_args['std_values'] = json_normalization['std_values']
+        # ==============================
 
         if config_dict.get('pruning', False):
             rknn_config_args['model_pruning'] = True
@@ -85,7 +96,7 @@ class RKNNAdapter:
             return False
         return True
 
-    def convert(self, onnx_path, output_path, input_shapes, config_dict, custom_string=None):
+    def convert(self, onnx_path, output_path, input_shapes, config_dict, custom_string=None, json_normalization=None):
         """
         Independent full conversion method.
         """
@@ -96,7 +107,7 @@ class RKNNAdapter:
 
         # 1. Config (Call the new method)
         logger.info("--> (1/5). Configuring RKNN...")
-        self.config(config_dict, custom_string)
+        self.config(config_dict, custom_string, json_normalization)
         logger.info("-----------------------\n")
 
         # 2. Load
