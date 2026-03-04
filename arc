@@ -75,15 +75,15 @@ func_1_4_show_help() {
     echo ""
     echo "--- 3 Ways to Run (Modes) ---"
     echo "1. Interactive Menu (Lazy Mode):"
-    echo "   $ ./start.sh"
+    echo "   $ ./arc"
     echo "   (Shows a list of all configs to select)"
     echo ""
     echo "2. Short Name Mode (Toolchain Style):"
-    echo "   $ ./start.sh rv1126b_sherpa"
+    echo "   $ ./arc rv1126b_sherpa"
     echo "   (Automatically finds configs/rv1126b_sherpa.yaml)"
     echo ""
     echo "3. Explicit Path Mode:"
-    echo "   $ ./start.sh configs/my_custom_config.yaml"
+    echo "   $ ./arc configs/my_custom_config.yaml"
     echo ""
     echo "--- Maintenance Commands ---"
     echo "  clean       : Remove workspace/ and output/ directories"
@@ -491,13 +491,13 @@ main() {
         exit 0
     fi
 
-    # Processing -- 3. Fallback for Legacy calls (e.g. `./start.sh convert -c ...`)
+    # Processing -- 3. Fallback for Legacy calls (e.g. `./arc convert -c ...`)
     if [ "$1" == "convert" ] && [ "$2" == "-c" ] && [ -n "$3" ]; then
         func_4_2_mode_direct "$3"
     elif [ "$1" == "convert" ] && [ -n "$2" ]; then
         func_4_2_mode_direct "$2"
     else
-        func_1_2_err "Invalid arguments. Try './start.sh help'."
+        func_1_2_err "Invalid arguments. Try './arc help'."
     fi
 }
 
