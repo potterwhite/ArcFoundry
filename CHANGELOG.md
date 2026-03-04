@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/potterwhite/ArcFoundry/compare/v0.10.0...v0.11.0) (2026-03-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cv:** The primary entry point has been renamed from `start.sh` to `arc`.
+
+### ✨ Added
+
+* **cv:** add MODNet support and vision model quantization pipeline  ([#24](https://github.com/potterwhite/ArcFoundry/issues/24)) ([6b07755](https://github.com/potterwhite/ArcFoundry/commit/6b0775566010068e6726350e6589c4fcd562e51f))
+
+cv: add MODNet support and vision model quantization pipeline
+
+add normalization parameter support in yaml and py
+
+add input_signature module to recognize different dimensions of input shapes
+
+tested fp16 inference less than 305ms for MODNet 
+
+successful NPU operator mapping for 512x512 shapes 
+
+The primary entry point has been renamed from start.sh to arc.
+
+---
+
 ## [0.10.0](https://github.com/potterwhite/ArcFoundry/compare/v0.9.1...v0.10.0) (2026-01-30)
 
 * **arc:** add build timing and fix sdk version resolving ([#21](https://github.com/potterwhite/ArcFoundry/issues/21)) ([d356bd9](https://github.com/potterwhite/ArcFoundry/commit/d356bd98f5ff922dacc846668e1fb7ce471a57d4))
