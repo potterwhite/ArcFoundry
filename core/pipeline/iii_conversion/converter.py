@@ -23,16 +23,17 @@ import numpy as np
 import onnxruntime as ort
 # from core.utils.utils import logger, get_btf_from_yaml
 from core.utils.utils import logger, get_input_signature_from_yaml
-from core.rknn_adapter import RKNNAdapter
-from core.verification.comparator import ModelComparator
-from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
+from ._rknn_adapter import RKNNAdapter
+from ._comparator import ModelComparator
+from core.pipeline.ii_configuration.strategies.sherpa_features_extractor import SherpaFeatureExtractor
 
 
 class StandardConverter:
 
     def __init__(self, global_config):
         self.cfg = global_config
-        self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        self.output_dir = self.cfg.get("project",
+                                       {}).get("output_dir", "./output")
         # ************************
         # Handle input signature
         # _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
@@ -51,7 +52,6 @@ class StandardConverter:
         else:
             raise ValueError("Unsupported model input type.")
         # ************************
-
 
     def _verify_model(self, model_cfg, onnx_path, build_config):
         # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
@@ -79,15 +79,19 @@ class StandardConverter:
             # 2. Prepare Input Data
             sess = ort.InferenceSession(onnx_path)
             input_feed = {}
-            extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames,
-                                               sample_rate=16000,
-                                               n_mels=self.json_feature)
+            extractor = SherpaFeatureExtractor(
+                time_frames=self.json_time_frames,
+                sample_rate=16000,
+                n_mels=self.json_feature)
 
             test_audio_path = self.cfg.get("build", {}).get("test_input", None)
 
             for i, inp in enumerate(sess.get_inputs()):
                 # a. Handle Dynamic Shape (Replace string/None with 1)
-                static_shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
+                static_shape = [
+                    1 if isinstance(d, str) or d is None else d
+                    for d in inp.shape
+                ]
 
                 # b. Detect NumPy Data Type
                 onnx_type = inp.type
@@ -102,13 +106,19 @@ class StandardConverter:
                     np_dtype = np.float16
 
                 # Deal with Dynamic Shape (Replace string/None with 1) --- IGNORE ---
-                static_shape = [1 if isinstance(d, str) or d is None else d for d in inp.shape]
+                static_shape = [
+                    1 if isinstance(d, str) or d is None else d
+                    for d in inp.shape
+                ]
 
                 # c. Generate Input Data
                 # Condition: Index 0 + Configured Path + File Exists + Is Float Type
-                if (i == 0 and test_audio_path and os.path.exists(test_audio_path) and np.issubdtype(
-                        np_dtype, np.floating)):
-                    logger.info(f"   Using real audio for input '{inp.name}': {test_audio_path}")
+                if (i == 0 and test_audio_path
+                        and os.path.exists(test_audio_path)
+                        and np.issubdtype(np_dtype, np.floating)):
+                    logger.info(
+                        f"   Using real audio for input '{inp.name}': {test_audio_path}"
+                    )
                     feats = extractor.compute(test_audio_path)
 
                     # Crop to target length
@@ -116,18 +126,22 @@ class StandardConverter:
                     if feats.shape[0] > target_len:
                         feats = feats[:target_len, :]
 
-                    input_feed[inp.name] = np.expand_dims(feats, axis=0).astype(np_dtype)
+                    input_feed[inp.name] = np.expand_dims(
+                        feats, axis=0).astype(np_dtype)
 
                 else:
                     # Fallback: Random Data based on Type
                     if np.issubdtype(np_dtype, np.integer):
                         # Generate random integers (e.g. sequence lengths)
-                        input_feed[inp.name] = np.random.randint(0, 10, size=static_shape).astype(np_dtype)
+                        input_feed[inp.name] = np.random.randint(
+                            0, 10, size=static_shape).astype(np_dtype)
                     elif np_dtype == bool:
-                        input_feed[inp.name] = np.random.choice([True, False], size=static_shape)
+                        input_feed[inp.name] = np.random.choice(
+                            [True, False], size=static_shape)
                     else:
                         # Generate random floats
-                        input_feed[inp.name] = np.random.rand(*static_shape).astype(np_dtype)
+                        input_feed[inp.name] = np.random.rand(
+                            *static_shape).astype(np_dtype)
 
             # 3. Execute Comparison
             metrics = comparator.compare_with_onnx(onnx_path, input_feed)
@@ -138,7 +152,9 @@ class StandardConverter:
 
             # 4. Determine Result
             if comparator.validate_metric(metrics, threshold=0.98):
-                logger.info(f"✅ Verification PASSED: {model_cfg['name']} matches ONNX baseline.")
+                logger.info(
+                    f"✅ Verification PASSED: {model_cfg['name']} matches ONNX baseline."
+                )
             else:
                 logger.warning(
                     f"⚠️ Verification WARNING: {model_cfg['name']} accuracy might be low (Min Score: {min_score:.6f})."
@@ -155,8 +171,16 @@ class StandardConverter:
     # --------------------------------------------------------------------------
     # Level 2: Standard Conversion & Evaluation
     # --------------------------------------------------------------------------
-    def convert_and_evaluate(self, target_plat, model_name, onnx_path, output_path, input_shapes,
-                             build_config, custom_string, model_cfg, json_normalization=None):
+    def convert_and_evaluate(self,
+                             target_plat,
+                             model_name,
+                             onnx_path,
+                             output_path,
+                             input_shapes,
+                             build_config,
+                             custom_string,
+                             model_cfg,
+                             json_normalization=None):
         """
         Description:
             This function handles a standard conversion process and returns an accuracy score.
@@ -172,37 +196,49 @@ class StandardConverter:
         # === [Fast-Forward] Check for existing analysis report ===
         # Only trigger if both RKNN model and analysis report exist
         if os.path.exists(output_path) and os.path.exists(existing_report):
-            logger.warning(f"⏩ [FAST-FORWARD] Found existing analysis report: {existing_report}")
-            logger.warning(f"   Skipping Build & Verification to jump straight to Hybrid Quantization logic.")
+            logger.warning(
+                f"⏩ [FAST-FORWARD] Found existing analysis report: {existing_report}"
+            )
+            logger.warning(
+                f"   Skipping Build & Verification to jump straight to Hybrid Quantization logic."
+            )
 
             # return 0.0 to trigger recovery flow
             return 0.0
         # =========================================================
 
-        adapter = RKNNAdapter(target_platform=target_plat, verbose=build_config.get('verbose', False))
+        adapter = RKNNAdapter(target_platform=target_plat,
+                              verbose=build_config.get('verbose', False))
 
         # Processing -- A. Convert
-        ret = adapter.convert(onnx_path, output_path, input_shapes, build_config, custom_string, json_normalization)
+        ret = adapter.convert(onnx_path, output_path, input_shapes,
+                              build_config, custom_string, json_normalization)
         score = 1.0
 
         if ret:
             logger.info(f"SUCCESS: Standard model saved to {output_path}")
 
             # Processing -- B. Verify (Verification)
-            is_quant = build_config.get('quantization', {}).get('enabled', False)
+            is_quant = build_config.get('quantization',
+                                        {}).get('enabled', False)
             if is_quant:
                 score = self._verify_model(model_cfg, onnx_path, build_config)
 
                 if score < 0.99:
                     logger.warning(
-                        f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release...")
-                    dataset_path = build_config.get('quantization', {}).get('dataset')
-                    analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+                        f"📉 Low Accuracy ({score:.4f}). Running immediate analysis before release..."
+                    )
+                    dataset_path = build_config.get('quantization',
+                                                    {}).get('dataset')
+                    analysis_dir = os.path.join(self.output_dir, "analysis",
+                                                model_name)
                     adapter.run_deep_analysis(dataset_path, analysis_dir)
                 else:
                     logger.info(f"✅ Accuracy is good enough ({score:.4f}).")
             else:
-                logger.info(f"🔎 Verification skipped for {model_cfg['name']} (Quantization is disabled).")
+                logger.info(
+                    f"🔎 Verification skipped for {model_cfg['name']} (Quantization is disabled)."
+                )
         else:
             logger.error(f"FAILURE: RKNN Conversion failed for {model_name}")
             score = 0.0

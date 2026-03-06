@@ -24,10 +24,10 @@ import os
 from core.utils.utils import logger
 
 # Import the registry and strategies to ensure they are registered
-from core.quantization.strategies import get_strategy_class
+from .strategies import get_strategy_class
 # NOTE: Importing the module below triggers the @register_strategy decorator
-import core.quantization.strategies.streaming
-import core.quantization.strategies.vision
+import core.pipeline.ii_configuration.strategies.vision
+import core.pipeline.ii_configuration.strategies.streaming
 
 
 class CalibrationGenerator:
@@ -57,7 +57,8 @@ class CalibrationGenerator:
         try:
             strategy_cls = get_strategy_class(self.model_type)
             self.strategy = strategy_cls(config)
-            logger.info(f"✅ Initialized Calibration Strategy: {self.model_type}")
+            logger.info(
+                f"✅ Initialized Calibration Strategy: {self.model_type}")
         except ValueError as e:
             logger.error(str(e))
             raise
@@ -71,31 +72,42 @@ class CalibrationGenerator:
         """
         models = self.cfg.get('models', [])
         if not models:
-            logger.warning("No models found in config, defaulting to 'streaming_audio'")
+            logger.warning(
+                "No models found in config, defaulting to 'streaming_audio'")
             return 'streaming_audio'
 
         model_name = models[0].get('name', '').lower()
 
         # CV model keywords
-        cv_keywords = ['modnet', 'yolo', 'resnet', 'mobilenet', 'efficientnet',
-                       'segmentation', 'detection', 'classification', 'matting']
+        cv_keywords = [
+            'modnet', 'yolo', 'resnet', 'mobilenet', 'efficientnet',
+            'segmentation', 'detection', 'classification', 'matting'
+        ]
 
         # ASR model keywords
-        asr_keywords = ['encoder', 'decoder', 'joiner', 'sherpa', 'zipformer',
-                        'transducer', 'conformer', 'asr']
+        asr_keywords = [
+            'encoder', 'decoder', 'joiner', 'sherpa', 'zipformer',
+            'transducer', 'conformer', 'asr'
+        ]
 
         # Check for CV models
         if any(keyword in model_name for keyword in cv_keywords):
-            logger.info(f"Auto-detected CV model: {model_name} -> using 'vision' strategy")
+            logger.info(
+                f"Auto-detected CV model: {model_name} -> using 'vision' strategy"
+            )
             return 'vision'
 
         # Check for ASR models
         if any(keyword in model_name for keyword in asr_keywords):
-            logger.info(f"Auto-detected ASR model: {model_name} -> using 'streaming_audio' strategy")
+            logger.info(
+                f"Auto-detected ASR model: {model_name} -> using 'streaming_audio' strategy"
+            )
             return 'streaming_audio'
 
         # Default to vision for unknown models
-        logger.warning(f"Unknown model type: {model_name}, defaulting to 'vision' strategy")
+        logger.warning(
+            f"Unknown model type: {model_name}, defaulting to 'vision' strategy"
+        )
         return 'vision'
 
     def _check_cache(self, list_file_path):
@@ -105,7 +117,9 @@ class CalibrationGenerator:
                 first_line = f.readline().strip()
                 # Check if the file referenced in the first line actually exists
                 if first_line and os.path.exists(first_line.split(' ')[0]):
-                    logger.info(f"⏩ [FAST-FORWARD] Found existing calibration list: {list_file_path}")
+                    logger.info(
+                        f"⏩ [FAST-FORWARD] Found existing calibration list: {list_file_path}"
+                    )
                     return True
         return False
 
@@ -114,12 +128,14 @@ class CalibrationGenerator:
         Standard interface called by PipelineEngine.
         """
         # Preparation -- 1. Common Logic: Extract dataset path from config
-        json_ds_path = self.cfg.get('build', {}).get('quantization', {}).get('dataset')
+        json_ds_path = self.cfg.get('build', {}).get('quantization',
+                                                     {}).get('dataset')
         list_file_path = os.path.join(output_dir, "dataset_list.txt")
 
         # Preparation -- 2. Validate presence of dataset path
         if not json_ds_path:
-            logger.warning("Quantization enabled but 'dataset' path missing in config.")
+            logger.warning(
+                "Quantization enabled but 'dataset' path missing in config.")
             return None
 
         # Preparation -- 3. Common Logic: Check Cache (Avoid re-running if exists)

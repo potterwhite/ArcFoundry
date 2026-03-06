@@ -22,9 +22,9 @@ add normalization parameter support in yaml and py
 
 add input_signature module to recognize different dimensions of input shapes
 
-tested fp16 inference less than 305ms for MODNet 
+tested fp16 inference less than 305ms for MODNet
 
-successful NPU operator mapping for 512x512 shapes 
+successful NPU operator mapping for 512x512 shapes
 
 The primary entry point has been renamed from start.sh to arc.
 
@@ -108,7 +108,7 @@ The primary entry point has been renamed from start.sh to arc.
 
 ## [0.8.0](https://github.com/potterwhite/ArcFoundry/compare/v0.7.0...v0.8.0) (2026-01-23)
 
-### 🚀 New Features 
+### 🚀 New Features
 
 *   **Modular Architecture**: Completely refactored the core engine. The monolithic pipeline is now split into three specialized workers:
     *   `QuantizationConfigurator`: Manages dataset preparation and precision decisions.
@@ -122,13 +122,13 @@ The primary entry point has been renamed from start.sh to arc.
 *   **Auto Cleanup**: Added a `cleanup_garbage` utility to automatically remove intermediate ONNX and RKNN configuration files after a successful build.
 *   **Visualized Verification**: The verification logs now include visual indicators (✅, ⚠️, ❌) and explicit checks for `NaN` or `Inf` values in inference outputs.
 
-### 🛠 Refactoring 
+### 🛠 Refactoring
 
 *   **DSP Module**: Renamed `core/dsp/audio_features.py` to `core/dsp/sherpa_features_extractor.py` to explicitly indicate its purpose for Sherpa-Onnx compatibility.
 *   **Streaming Strategy**: Optimized `core/quantization/strategies/streaming.py` to strictly handle dynamic shapes by forcing dimension parameters to `1`.
 *   **Config Structure**: Moved complex build logic out of `engine.py` into dedicated workflow classes.
 
-### 📚 Documentation 
+### 📚 Documentation
 
 *   **Complete Overhaul**: Redesigned `README.md` with new architectural diagrams (Mermaid) and clearer usage instructions.
 *   **i18n Support**: Added Simplified Chinese documentation (`docs/README_ZH_CN.md`).
@@ -157,7 +157,7 @@ The primary entry point has been renamed from start.sh to arc.
 
 **Calibration (`core/quantization/`):**
 - Refactor `CalibrationGenerator` to use a Strategy/Registry pattern.
-- Extract streaming-specific logic to `StreamingAudioStrategy`.
+- Extract streaming-specific logic to `StreamingQuantizationStrategy`.
 - Implement caching in `generate()` to reuse existing dataset lists.
 
 **RKNN Adapter (`core/rknn_adapter.py`):**

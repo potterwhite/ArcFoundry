@@ -30,7 +30,7 @@ from . import register_strategy
 
 
 @register_strategy("vision")
-class VisionStrategy:
+class VisionQuantizationStrategy:
     """
     Calibration strategy for computer vision models (e.g., MODNet, YOLO, ResNet).
 
@@ -44,7 +44,8 @@ class VisionStrategy:
     def __init__(self, config):
         self.cfg = config
         # Default sampling interval: save every 5th image
-        self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
+        self.sampling_interval = self.cfg.get('build', {}).get(
+            'quantization', {}).get('sampling_interval', 5)
 
         # Extract normalization parameters from config
         self.mean_values = None
@@ -56,8 +57,10 @@ class VisionStrategy:
             model_config = models[0]  # Use first model's config
             normalization = model_config.get('normalization', {})
             if normalization:
-                self.mean_values = normalization.get('mean_values', [[127.5, 127.5, 127.5]])[0]
-                self.std_values = normalization.get('std_values', [[127.5, 127.5, 127.5]])[0]
+                self.mean_values = normalization.get(
+                    'mean_values', [[127.5, 127.5, 127.5]])[0]
+                self.std_values = normalization.get('std_values',
+                                                    [[127.5, 127.5, 127.5]])[0]
 
     def _load_image_list(self, dataset_path):
         """Load list of image paths from dataset file."""
@@ -87,7 +90,8 @@ class VisionStrategy:
 
         # Resize to target dimensions
         target_h, target_w = target_shape[0], target_shape[1]
-        img = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        img = cv2.resize(img, (target_w, target_h),
+                         interpolation=cv2.INTER_AREA)
 
         # Convert to float32
         img = img.astype(np.float32)
@@ -146,7 +150,8 @@ class VisionStrategy:
 
         # Process images and save as .npy files
         saved_files = []
-        for idx, img_path in enumerate(tqdm(image_paths, desc="Processing images")):
+        for idx, img_path in enumerate(
+                tqdm(image_paths, desc="Processing images")):
             # Apply sampling interval
             if idx % self.sampling_interval != 0:
                 continue
@@ -158,7 +163,7 @@ class VisionStrategy:
                 # Add batch dimension and convert to NCHW format
                 # img_array is currently (H, W, C), need to convert to (1, C, H, W)
                 img_array = np.transpose(img_array, (2, 0, 1))  # HWC -> CHW
-                img_array = np.expand_dims(img_array, axis=0)   # CHW -> NCHW
+                img_array = np.expand_dims(img_array, axis=0)  # CHW -> NCHW
 
                 # Save as .npy file
                 npy_filename = f"calib_{idx:04d}.npy"
@@ -175,7 +180,8 @@ class VisionStrategy:
 
         # Create calibration list file with absolute paths
         # IMPORTANT: Use absolute paths to avoid path duplication issues with RKNN toolkit
-        list_file_path = os.path.abspath(os.path.join(output_dir, "calibration_list.txt"))
+        list_file_path = os.path.abspath(
+            os.path.join(output_dir, "calibration_list.txt"))
         with open(list_file_path, 'w') as f:
             for npy_path in saved_files:
                 # Ensure all paths are absolute

@@ -118,7 +118,7 @@ ArcFoundry resolves edge cases that the official Toolkit finds difficult to hand
 
 1.  **Streaming Calibration**
     *   For models with **Internal States** (like RNN-T / Zipformer), traditional random input leads to quantization collapse.
-    *   Built-in `StreamingAudioStrategy`: Simulates streaming inference (Sliding Window) on the PC side to capture Tensor data with the correct context memory for calibration.
+    *   Built-in `StreamingQuantizationStrategy`: Simulates streaming inference (Sliding Window) on the PC side to capture Tensor data with the correct context memory for calibration.
     *   *Implementation: `core/quantization/strategies/streaming.py`*
 
 2.  **Auto-Hybrid Patching**

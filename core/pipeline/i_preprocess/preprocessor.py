@@ -22,8 +22,8 @@ import onnx
 import onnxsim
 import onnxruntime
 import os
-from core.quantization import strategies
-from core.utils.utils import logger
+#from core.quantization import strategies
+from utils import logger
 
 
 class Preprocessor:
@@ -49,7 +49,10 @@ class Preprocessor:
     #                 changed = True
     # return changed
 
-    def _fix_dynamic_shapes(self, model, json_input_shapes, json_strict_override=False):
+    def _fix_dynamic_shapes(self,
+                            model,
+                            json_input_shapes,
+                            json_strict_override=False):
         """
         Fix dynamic input dimensions of an ONNX model
         using json_input_shapes provided from YAML configuration.
@@ -86,11 +89,14 @@ class Preprocessor:
         # Ensure every entry is a list of integers
         for shape in json_input_shapes:
             if not isinstance(shape, list):
-                raise ValueError("Each element in json_input_shapes must be a list.")
+                raise ValueError(
+                    "Each element in json_input_shapes must be a list.")
 
             for dim in shape:
                 if not isinstance(dim, int):
-                    raise ValueError("All dimensions in json_input_shapes must be integers.")
+                    raise ValueError(
+                        "All dimensions in json_input_shapes must be integers."
+                    )
 
         # ---------------------------------------------------------
         # 2️⃣ Get ONNX model inputs
@@ -98,8 +104,9 @@ class Preprocessor:
         model_inputs = model.graph.input
 
         if len(model_inputs) != len(json_input_shapes):
-            raise ValueError(f"Input count mismatch: ONNX model has {len(model_inputs)} inputs, "
-                             f"but YAML defines {len(json_input_shapes)} shapes.")
+            raise ValueError(
+                f"Input count mismatch: ONNX model has {len(model_inputs)} inputs, "
+                f"but YAML defines {len(json_input_shapes)} shapes.")
 
         # ---------------------------------------------------------
         # 3️⃣ Iterate over each input tensor
@@ -111,9 +118,10 @@ class Preprocessor:
 
             # Validate rank consistency
             if len(dims) != len(target_shape):
-                raise ValueError(f"Rank mismatch for input '{input_tensor.name}': "
-                                 f"Model expects {len(dims)} dims, "
-                                 f"but YAML defines {len(target_shape)} dims.")
+                raise ValueError(
+                    f"Rank mismatch for input '{input_tensor.name}': "
+                    f"Model expects {len(dims)} dims, "
+                    f"but YAML defines {len(target_shape)} dims.")
 
             # -----------------------------------------------------
             # 4️⃣ Replace dynamic dimensions safely
@@ -122,8 +130,7 @@ class Preprocessor:
                 logger.debug(
                     f"  - Processing dimension index {i}: "
                     f"dim_param='{dim.dim_param}', dim_value={dim.dim_value}, "
-                    f"target_value={target_shape[i]}"
-                )
+                    f"target_value={target_shape[i]}")
 
                 # Replace dimension safely
                 if json_strict_override:
@@ -165,7 +172,8 @@ class Preprocessor:
             # Heuristic: If it's the specific 'y' input or generally needed
             # For now, apply to 'y' as seen in original script, or make generic via config later.
             if input_tensor.name == 'y':
-                logger.debug(f"  - Forcing input '{input_tensor.name}' to INT64")
+                logger.debug(
+                    f"  - Forcing input '{input_tensor.name}' to INT64")
                 input_tensor.type.tensor_type.elem_type = onnx.TensorProto.INT64
                 changed = True
         return changed
@@ -179,7 +187,8 @@ class Preprocessor:
                 onnx.save(model_simp, output_path)
                 return output_path
             else:
-                logger.warning("onnxsim check failed, using unsimplified model.")
+                logger.warning(
+                    "onnxsim check failed, using unsimplified model.")
                 return input_path
         except Exception as e:
             logger.error(f"onnxsim failed: {e}")
@@ -192,9 +201,8 @@ class Preprocessor:
             sess_options = onnxruntime.SessionOptions()
             # Suppress logs
             sess_options.log_severity_level = 3
-            session = onnxruntime.InferenceSession(onnx_path,
-                                                   sess_options,
-                                                   providers=["CPUExecutionProvider"])
+            session = onnxruntime.InferenceSession(
+                onnx_path, sess_options, providers=["CPUExecutionProvider"])
 
             meta = session.get_modelmeta()
             custom_map = meta.custom_metadata_map
@@ -212,7 +220,8 @@ class Preprocessor:
             logger.error(f"Failed to extract metadata: {e}")
             return None
 
-    def preprocess(self, model_name, model_path, model_shapes, output_path, json_strategies):
+    def preprocess(self, model_name, model_path, model_shapes, output_path,
+                   json_strategies):
         """
         Applies a series of preprocessing strategies to the ONNX model.
         """
@@ -233,11 +242,15 @@ class Preprocessor:
             try:
                 logger.info(f"[Cache Hit] Found existing file: {output_path}")
                 onnx.load(output_path)
-                logger.info("⏩ [FAST-FORWARD] Model is valid. Skipping complex preprocessing steps.\n")
+                logger.info(
+                    "⏩ [FAST-FORWARD] Model is valid. Skipping complex preprocessing steps.\n"
+                )
 
                 return output_path, custom_string
             except Exception:
-                logger.warning(f"   Cached model corrupted or invalid ({e}). removing and regenerating...")
+                logger.warning(
+                    f"   Cached model corrupted or invalid ({e}). removing and regenerating..."
+                )
                 try:
                     os.remove(output_path)
                 except OSError:
@@ -275,7 +288,8 @@ class Preprocessor:
         # Processing -- 5. Simplify (onnxsim)
         if json_strategies.get('simplify', False):
             logger.info("Strategy (4/4): Running ONNX Simplifier...")
-            current_model_path = self._simplify(current_model_path, output_path)
+            current_model_path = self._simplify(current_model_path,
+                                                output_path)
         else:
             logger.info("Strategy (4/4): ONNX Simplification Disabled.")
 
