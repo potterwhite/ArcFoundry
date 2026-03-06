@@ -188,6 +188,8 @@ class Preprocessor:
         """
         # Enforce Dictionary format for mapping (Name -> Shape)
         if not isinstance(json_input_shapes, dict):
+            logger.error(
+                f"json_input_shapes={json_input_shapes} is not a dictionary.")
             raise ValueError("json_input_shapes MUST be a dictionary. \n"
                              "Update your YAML format. Example:\n"
                              "input_shapes:\n"

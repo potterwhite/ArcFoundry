@@ -57,7 +57,7 @@ models:
       strict_override: false
     input_shapes:
       # [batch=1, frames=71, features=80] comes from the inspection of the rknn from sherpa-onnx official
-      - x: [1, 71, 80]
+      x: [1, 71, 80]
 
   - name: "decoder"
     path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/decoder-epoch-99-avg-1.onnx"
@@ -70,7 +70,7 @@ models:
       fix_int64_type: true
       strict_override: false
     input_shapes:
-      - y: [1, 512]
+      y: [1, 512]
 
   - name: "joiner"
     path: "models/downloads/sherpa-onnx-streaming-zipformer-en-2023-02-21/joiner-epoch-99-avg-1.onnx"
@@ -82,5 +82,5 @@ models:
       extract_metadata: true
       strict_override: false
     input_shapes:
-      - encoder_out: [1, 512]
-      - decoder_out: [1, 512]
+      encoder_out: [1, 512]
+      decoder_out: [1, 512]
