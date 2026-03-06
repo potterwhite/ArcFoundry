@@ -34,123 +34,179 @@ class StandardConverter:
         self.cfg = global_config
         self.output_dir = self.cfg.get("project",
                                        {}).get("output_dir", "./output")
-        # ************************
-        # Handle input signature
-        # _, self.json_time_frames, self.json_feature = get_btf_from_yaml(self.cfg)
-        self.input_signature = get_input_signature_from_yaml(self.cfg)
 
-        sig_info = self.input_signature.as_dict()
+    # def _verify_model(self, model_cfg, onnx_path, build_config):
+    #     # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
+    #     """
+    #     V1.1 Feature: Auto-Verification
+    #     Returns:
+    #         float: The minimum cosine similarity score (0.0 - 1.0).
+    #                Returns 1.0 if verification is skipped or crashes (to avoid false triggers).
+    #     """
+    #     logger.info(f"🔎 Starting Verification for {model_cfg['name']}...")
+    #     min_score = 1.0  # Default safe value
 
-        if sig_info["type"] == "ASR":
-            self.json_time_frames = sig_info["time"]
-            self.json_feature = sig_info["feature"]
+    #     try:
+    #         # 1. Initialize Comparator
+    #         target_platform = self.cfg.get("target", {}).get("platform")
+    #         comparator = ModelComparator(target_platform)
 
-        elif sig_info["type"] == "CV":
-            self.json_height = sig_info["height"]
-            self.json_width = sig_info["width"]
+    #         # --- CHANGE START ---
+    #         input_shapes = model_cfg.get("input_shapes", None)
+    #         #build_config = self.cfg.get("build", {})
 
-        else:
-            raise ValueError("Unsupported model input type.")
-        # ************************
+    #         comparator.prepare_simulator(onnx_path, input_shapes, build_config)
+    #         # --- CHANGE END ---
 
+    #         # 2. Prepare Input Data
+    #         sess = ort.InferenceSession(onnx_path)
+    #         input_feed = {}
+    #         extractor = SherpaFeatureExtractor(
+    #             time_frames=self.json_time_frames,
+    #             sample_rate=16000,
+    #             n_mels=self.json_feature)
+
+    #         test_audio_path = self.cfg.get("build", {}).get("test_input", None)
+
+    #         for i, inp in enumerate(sess.get_inputs()):
+    #             # a. Handle Dynamic Shape (Replace string/None with 1)
+    #             static_shape = [
+    #                 1 if isinstance(d, str) or d is None else d
+    #                 for d in inp.shape
+    #             ]
+
+    #             # b. Detect NumPy Data Type
+    #             onnx_type = inp.type
+    #             np_dtype = np.float32  # Default fallback
+    #             if "int64" in onnx_type:
+    #                 np_dtype = np.int64
+    #             elif "int32" in onnx_type:
+    #                 np_dtype = np.int32
+    #             elif "bool" in onnx_type:
+    #                 np_dtype = bool
+    #             elif "float16" in onnx_type:
+    #                 np_dtype = np.float16
+
+    #             # Deal with Dynamic Shape (Replace string/None with 1) --- IGNORE ---
+    #             static_shape = [
+    #                 1 if isinstance(d, str) or d is None else d
+    #                 for d in inp.shape
+    #             ]
+
+    #             # c. Generate Input Data
+    #             # Condition: Index 0 + Configured Path + File Exists + Is Float Type
+    #             if (i == 0 and test_audio_path
+    #                     and os.path.exists(test_audio_path)
+    #                     and np.issubdtype(np_dtype, np.floating)):
+    #                 logger.info(
+    #                     f"   Using real audio for input '{inp.name}': {test_audio_path}"
+    #                 )
+    #                 feats = extractor.compute(test_audio_path)
+
+    #                 # Crop to target length
+    #                 target_len = static_shape[1]
+    #                 if feats.shape[0] > target_len:
+    #                     feats = feats[:target_len, :]
+
+    #                 input_feed[inp.name] = np.expand_dims(
+    #                     feats, axis=0).astype(np_dtype)
+
+    #             else:
+    #                 # Fallback: Random Data based on Type
+    #                 if np.issubdtype(np_dtype, np.integer):
+    #                     # Generate random integers (e.g. sequence lengths)
+    #                     input_feed[inp.name] = np.random.randint(
+    #                         0, 10, size=static_shape).astype(np_dtype)
+    #                 elif np_dtype == bool:
+    #                     input_feed[inp.name] = np.random.choice(
+    #                         [True, False], size=static_shape)
+    #                 else:
+    #                     # Generate random floats
+    #                     input_feed[inp.name] = np.random.rand(
+    #                         *static_shape).astype(np_dtype)
+
+    #         # 3. Execute Comparison
+    #         metrics = comparator.compare_with_onnx(onnx_path, input_feed)
+
+    #         # Calculate minimum score
+    #         if metrics:
+    #             min_score = min(metrics.values())
+
+    #         # 4. Determine Result
+    #         if comparator.validate_metric(metrics, threshold=0.98):
+    #             logger.info(
+    #                 f"✅ Verification PASSED: {model_cfg['name']} matches ONNX baseline."
+    #             )
+    #         else:
+    #             logger.warning(
+    #                 f"⚠️ Verification WARNING: {model_cfg['name']} accuracy might be low (Min Score: {min_score:.6f})."
+    #             )
+
+    #     except Exception as e:
+    #         logger.error(f"❌ Verification Failed: {str(e)}")
+    #         import traceback
+    #         # Print full traceback for debugging
+    #         logger.error(traceback.format_exc())
+
+    #     return min_score
     def _verify_model(self, model_cfg, onnx_path, build_config):
-        # def _verify_model(self, model_cfg, onnx_path, rknn_path, build_config):
-        """
-        V1.1 Feature: Auto-Verification
-        Returns:
-            float: The minimum cosine similarity score (0.0 - 1.0).
-                   Returns 1.0 if verification is skipped or crashes (to avoid false triggers).
-        """
         logger.info(f"🔎 Starting Verification for {model_cfg['name']}...")
-        min_score = 1.0  # Default safe value
+        min_score = 1.0
 
         try:
-            # 1. Initialize Comparator
             target_platform = self.cfg.get("target", {}).get("platform")
             comparator = ModelComparator(target_platform)
 
-            # --- CHANGE START ---
-            input_shapes = model_cfg.get("input_shapes", None)
-            #build_config = self.cfg.get("build", {})
-
+            input_shapes = model_cfg.get("input_shapes", {})  # 这里现在是个 Dict
             comparator.prepare_simulator(onnx_path, input_shapes, build_config)
-            # --- CHANGE END ---
 
-            # 2. Prepare Input Data
+            # --- 核心解耦：完全通用的数据生成逻辑 ---
             sess = ort.InferenceSession(onnx_path)
             input_feed = {}
-            extractor = SherpaFeatureExtractor(
-                time_frames=self.json_time_frames,
-                sample_rate=16000,
-                n_mels=self.json_feature)
 
-            test_audio_path = self.cfg.get("build", {}).get("test_input", None)
-
-            for i, inp in enumerate(sess.get_inputs()):
-                # a. Handle Dynamic Shape (Replace string/None with 1)
+            for inp in sess.get_inputs():
+                # 1. 获取 Shape。如果是动态的 (str 或者是 None)，兜底置为 1
                 static_shape = [
                     1 if isinstance(d, str) or d is None else d
                     for d in inp.shape
                 ]
 
-                # b. Detect NumPy Data Type
+                # 如果 YAML 里明确配置了这个 Tensor 的 Shape，优先用 YAML 的！
+                if inp.name in input_shapes:
+                    static_shape = input_shapes[inp.name]
+
+                # 2. 判断数据类型
                 onnx_type = inp.type
-                np_dtype = np.float32  # Default fallback
                 if "int64" in onnx_type:
                     np_dtype = np.int64
                 elif "int32" in onnx_type:
                     np_dtype = np.int32
                 elif "bool" in onnx_type:
                     np_dtype = bool
-                elif "float16" in onnx_type:
-                    np_dtype = np.float16
-
-                # Deal with Dynamic Shape (Replace string/None with 1) --- IGNORE ---
-                static_shape = [
-                    1 if isinstance(d, str) or d is None else d
-                    for d in inp.shape
-                ]
-
-                # c. Generate Input Data
-                # Condition: Index 0 + Configured Path + File Exists + Is Float Type
-                if (i == 0 and test_audio_path
-                        and os.path.exists(test_audio_path)
-                        and np.issubdtype(np_dtype, np.floating)):
-                    logger.info(
-                        f"   Using real audio for input '{inp.name}': {test_audio_path}"
-                    )
-                    feats = extractor.compute(test_audio_path)
-
-                    # Crop to target length
-                    target_len = static_shape[1]
-                    if feats.shape[0] > target_len:
-                        feats = feats[:target_len, :]
-
-                    input_feed[inp.name] = np.expand_dims(
-                        feats, axis=0).astype(np_dtype)
-
                 else:
-                    # Fallback: Random Data based on Type
-                    if np.issubdtype(np_dtype, np.integer):
-                        # Generate random integers (e.g. sequence lengths)
-                        input_feed[inp.name] = np.random.randint(
-                            0, 10, size=static_shape).astype(np_dtype)
-                    elif np_dtype == bool:
-                        input_feed[inp.name] = np.random.choice(
-                            [True, False], size=static_shape)
-                    else:
-                        # Generate random floats
-                        input_feed[inp.name] = np.random.rand(
-                            *static_shape).astype(np_dtype)
+                    np_dtype = np.float32  # 默认 float32
 
-            # 3. Execute Comparison
+                # 3. 生成随机测试数据 (Random Fake Data)
+                # 无论你是 1个输入的 ModNet，还是 36个输入的 Zipformer
+                # 这个循环都会给它们生成完美适配的无意义数据用于跑通误差测试
+                if np.issubdtype(np_dtype, np.integer):
+                    input_feed[inp.name] = np.random.randint(
+                        0, 10, size=static_shape).astype(np_dtype)
+                elif np_dtype == bool:
+                    input_feed[inp.name] = np.random.choice([True, False],
+                                                            size=static_shape)
+                else:
+                    input_feed[inp.name] = np.random.rand(
+                        *static_shape).astype(np_dtype)
+
+            # --- 解耦结束 ---
+
+            # 执行对比 (使用随机数据跑通 ONNX 和 RKNN 模拟器)
             metrics = comparator.compare_with_onnx(onnx_path, input_feed)
 
-            # Calculate minimum score
             if metrics:
                 min_score = min(metrics.values())
 
-            # 4. Determine Result
             if comparator.validate_metric(metrics, threshold=0.98):
                 logger.info(
                     f"✅ Verification PASSED: {model_cfg['name']} matches ONNX baseline."
@@ -163,7 +219,6 @@ class StandardConverter:
         except Exception as e:
             logger.error(f"❌ Verification Failed: {str(e)}")
             import traceback
-            # Print full traceback for debugging
             logger.error(traceback.format_exc())
 
         return min_score
