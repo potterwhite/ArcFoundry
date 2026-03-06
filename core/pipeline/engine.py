@@ -25,10 +25,6 @@ from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader
 from .i_preprocess import Preprocessor
 from .ii_configuration import QuantizationConfigurator
 from .iii_conversion import StandardConverter, PrecisionRecoverer
-# from core.pipeline.i_preprocess.preprocessor import Preprocessor
-# from core.pipeline.ii_configuration.configurator import QuantizationConfigurator
-# from core.pipeline.iii_conversion.converter import StandardConverter
-# from core.pipeline.iv_recovery.recoverer import PrecisionRecoverer
 
 
 class PipelineEngine:
