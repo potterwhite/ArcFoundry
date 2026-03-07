@@ -19,11 +19,11 @@
 # SOFTWARE.
 
 from rknn.api import RKNN
-from core.utils.utils import logger
+from utils import logger
 import os
 import json
 import re
-from core.quantization.analyzer import QuantizationAnalyzer
+#from core.quantization.analyzer import QuantizationAnalyzer
 
 
 class RKNNAdapter:

@@ -18,14 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# core/quantization/configurator.py
-
 import os
 import copy
 import json
 import sys
-from core.utils.utils import logger, timed_input
-from core.quantization.calibrator import CalibrationGenerator
+from utils import logger, timed_input
+from ._calibrator import CalibrationGenerator
 
 
 class QuantizationConfigurator:
@@ -41,7 +39,9 @@ class QuantizationConfigurator:
             workspace_dir (str): Path to the workspace directory.
         """
         self.cfg = global_config
-        self.workspace_dir = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
+        self.workspace_dir = self.cfg.get("project",
+                                          {}).get("workspace_dir",
+                                                  "./workspace")
 
     def _handle_fallback(self, reason):
         """
@@ -53,8 +53,8 @@ class QuantizationConfigurator:
         # Preparation -- 1. Define local variables
         timeout = 30
         msg = [
-            "\n" + "!" * 60, "!!! QUANTIZATION DATASET MISSING !!!", "!" * 60, f"Reason : {reason}",
-            "!" * 60 + "\n"
+            "\n" + "!" * 60, "!!! QUANTIZATION DATASET MISSING !!!", "!" * 60,
+            f"Reason : {reason}", "!" * 60 + "\n"
         ]
 
         # Preparation -- 2. Print alert message
@@ -65,7 +65,9 @@ class QuantizationConfigurator:
         logger.info("   [N] Abort pipeline immediately")
 
         # Processing -- 1. Wait for user decision with timeout
-        choice = timed_input(">>> Accept FP16 fallback? [Y/n]", timeout, default='y')
+        choice = timed_input(">>> Accept FP16 fallback? [Y/n]",
+                             timeout,
+                             default='y')
 
         # Processing -- 2. Act based on user choice
         if choice == 'n':
@@ -77,11 +79,14 @@ class QuantizationConfigurator:
     def _get_dataset_path(self, onnx_path):
         # Preparation -- 2. Define expected calibration dataset path
         # The name of the calibration dataset file is fixed to "calibration_list.txt"
-        expected_ds_path = os.path.join(self.workspace_dir, "calibration_list.txt")
+        expected_ds_path = os.path.join(self.workspace_dir,
+                                        "calibration_list.txt")
 
         # === [Optimization] Check if dataset list already exists ===
         if os.path.exists(expected_ds_path):
-            logger.info(f"⏩ [SKIP] Found existing calibration dataset: {expected_ds_path}")
+            logger.info(
+                f"⏩ [SKIP] Found existing calibration dataset: {expected_ds_path}"
+            )
             return_ds_path = expected_ds_path
         else:
             # generate if not exists
@@ -101,14 +106,16 @@ class QuantizationConfigurator:
         Returns:
             dict: The final build configuration for this model.
         """
-        logger.info(f"Configuring quantization settings for model: {model_name}")
+        logger.info(
+            f"Configuring quantization settings for model: {model_name}")
 
         # Preparation -- 1. Duplicate build config for safety and modification
         json_build_duplicate = copy.deepcopy(self.cfg.get('build', {}))
         json_build_duplicate['quantization']['dataset'] = None
 
         # Preparation -- 2. Check if quantization is enabled
-        if not json_build_duplicate.get('quantization', {}).get('enabled', False):
+        if not json_build_duplicate.get('quantization', {}).get(
+                'enabled', False):
             return json_build_duplicate
 
         # Preparation -- 3. Check validity based on model name
@@ -126,7 +133,8 @@ class QuantizationConfigurator:
             if ds_path and os.path.exists(ds_path):
                 json_build_duplicate['quantization']['dataset'] = ds_path
                 logger.info(
-                    f"✅ Calibration dataset confirmed: {json_build_duplicate['quantization']['dataset']}")
+                    f"✅ Calibration dataset confirmed: {json_build_duplicate['quantization']['dataset']}"
+                )
             else:
                 # Case A: Generator returned None or file doesn't exist
                 reason = f"Dataset generator returned invalid path: {ds_path}"
@@ -145,7 +153,9 @@ class QuantizationConfigurator:
             json_build_duplicate['quantization']['enabled'] = False
 
         # Debug: Log final quantization config
-        debug_msg = json.dumps(json_build_duplicate, indent=4, ensure_ascii=False)
+        debug_msg = json.dumps(json_build_duplicate,
+                               indent=4,
+                               ensure_ascii=False)
         logger.warning(f"🔧 Final Quant Config:\n{debug_msg}")
 
         return json_build_duplicate

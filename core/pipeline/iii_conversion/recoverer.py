@@ -19,8 +19,8 @@
 # SOFTWARE.
 
 import os
-from core.utils.utils import logger, timed_input
-from core.rknn_adapter import RKNNAdapter
+from utils import logger, timed_input
+#from core.rknn_adapter import RKNNAdapter
 
 
 class PrecisionRecoverer:

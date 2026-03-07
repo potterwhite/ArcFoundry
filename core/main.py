@@ -20,15 +20,18 @@
 
 import argparse
 import sys
-from core.utils.utils import setup_logging, logger
-from core.engine import PipelineEngine
-import time
+from utils import setup_logging, logger
+from pipeline import PipelineEngine
+#import time
 
 
 def main():
     # start_time = time.perf_counter()
     parser = argparse.ArgumentParser(description="ArcFoundry Core Engine")
-    parser.add_argument('-c', '--config', required=True, help="Path to YAML configuration file")
+    parser.add_argument('-c',
+                        '--config',
+                        required=True,
+                        help="Path to YAML configuration file")
     args = parser.parse_args()
 
     # Setup Logging

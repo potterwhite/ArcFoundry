@@ -384,7 +384,10 @@ func_3_1_resolve_config() {
         # Use simple array iteration for cleaner output than 'select'
         local i=1
         for f in "${files[@]}"; do
-            echo "  $i) $(basename "$f")"
+            local fullname="$(basename "$f")"
+            local shrinked_name="${fullname%.yaml}"
+            echo "  $i) ${shrinked_name}"
+            # echo "  $i) $(basename "$f")"
             ((i++))
         done
 

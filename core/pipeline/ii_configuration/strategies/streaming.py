@@ -25,14 +25,14 @@ import numpy as np
 import onnxruntime as ort
 from pathlib import Path
 from tqdm import tqdm
-# from core.utils.utils import logger, ensure_dir, get_btf_from_yaml
-from core.utils.utils import logger, ensure_dir, get_input_signature_from_yaml
-from core.dsp.sherpa_features_extractor import SherpaFeatureExtractor
+
+from utils import logger, ensure_dir, get_input_signature_from_yaml
+from .sherpa_features_extractor import SherpaFeatureExtractor
 from . import register_strategy
 
 
 @register_strategy("streaming_audio")
-class StreamingAudioStrategy:
+class StreamingQuantizationStrategy:
     """
     Calibration strategy for streaming audio models (e.g., Sherpa-Zipformer/Transducer).
 
@@ -46,7 +46,8 @@ class StreamingAudioStrategy:
     def __init__(self, config):
         self.cfg = config
         # Default sampling interval: save data every 5 frames
-        self.sampling_interval = self.cfg.get('build', {}).get('quantization', {}).get('sampling_interval', 5)
+        self.sampling_interval = self.cfg.get('build', {}).get(
+            'quantization', {}).get('sampling_interval', 5)
 
         # ************************
         # Handle input signature
@@ -66,9 +67,10 @@ class StreamingAudioStrategy:
         else:
             raise ValueError("Unsupported model input type.")
         # ************************
-        self.sherpa_extractor = SherpaFeatureExtractor(time_frames=self.json_time_frames,
-                                                       sample_rate=16000,
-                                                       n_mels=self.json_feature)
+        self.sherpa_extractor = SherpaFeatureExtractor(
+            time_frames=self.json_time_frames,
+            sample_rate=16000,
+            n_mels=self.json_feature)
 
     def _load_audio_list(self, dataset_path):
         if not os.path.exists(dataset_path):
@@ -100,7 +102,9 @@ class StreamingAudioStrategy:
         """
         # Preparation -- 1. Load audio paths
         audio_paths = self._load_audio_list(dataset_path)
-        logger.info(f"⚡ [Strategy: Streaming] Generating calibration data from {len(audio_paths)} files...")
+        logger.info(
+            f"⚡ [Strategy: Streaming] Generating calibration data from {len(audio_paths)} files..."
+        )
 
         # Preparation -- 2. Setup directories
         npy_dir = os.path.join(output_dir, "calibration_data")
@@ -128,9 +132,12 @@ class StreamingAudioStrategy:
             for d in inp.shape:
                 # Check if the dimension is a string (e.g., "batch_size") or None
                 if isinstance(d, str) or d is None:
-                    shape.append(1)  # If it's a dynamic dimension, force it to 1
+                    shape.append(
+                        1)  # If it's a dynamic dimension, force it to 1
                 else:
-                    shape.append(d)  # If it's a normal number (fixed dimension), keep it as is
+                    shape.append(
+                        d
+                    )  # If it's a normal number (fixed dimension), keep it as is
             # ******
             initial_states[inp.name] = np.zeros(shape, dtype=dtype)
 
@@ -159,7 +166,8 @@ class StreamingAudioStrategy:
                     step_counter += 1
 
                     # Prepare Input Feed
-                    feature_chunk = np.expand_dims(all_features[start:end, :], axis=0)  # [1, 39, 80]
+                    feature_chunk = np.expand_dims(all_features[start:end, :],
+                                                   axis=0)  # [1, 39, 80]
                     feed_dict = {inputs_meta[0].name: feature_chunk}
                     feed_dict.update(current_states)
 
@@ -169,8 +177,10 @@ class StreamingAudioStrategy:
                         step_name = f"{Path(audio_path).stem}_s{start}"
 
                         for name, data in feed_dict.items():
-                            safe_name = name.replace('/', '_').replace(':', '_')
-                            file_path = os.path.join(npy_dir, f"{step_name}_{safe_name}.npy")
+                            safe_name = name.replace('/',
+                                                     '_').replace(':', '_')
+                            file_path = os.path.join(
+                                npy_dir, f"{step_name}_{safe_name}.npy")
                             np.save(file_path, data)
                             step_files.append(os.path.abspath(file_path))
 
@@ -197,5 +207,6 @@ class StreamingAudioStrategy:
         with open(list_file_path, "w") as f:
             f.write("\n".join(generated_lines))
 
-        logger.info(f"Calibration dataset ready: {len(generated_lines)} samples.")
+        logger.info(
+            f"Calibration dataset ready: {len(generated_lines)} samples.")
         return list_file_path

@@ -21,7 +21,7 @@
 import numpy as np
 import onnxruntime as ort
 from rknn.api import RKNN
-from core.utils.utils import logger
+from utils import logger
 from typing import List, Dict, Any
 
 

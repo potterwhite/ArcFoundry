@@ -19,13 +19,13 @@
 # SOFTWARE.
 
 import os
-import yaml
-from core.utils.utils import logger, ensure_dir, cleanup_garbage
-from core.workflow.preprocessor import Preprocessor
-from core.utils.downloader import ModelDownloader
-from core.quantization.configurator import QuantizationConfigurator
-from core.workflow.converter import StandardConverter
-from core.workflow.recoverer import PrecisionRecoverer
+from time import sleep
+
+from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader, load_config_file
+
+from .i_preprocess import Preprocessor
+from .ii_configuration import QuantizationConfigurator
+from .iii_conversion import StandardConverter, PrecisionRecoverer
 
 
 class PipelineEngine:
@@ -36,11 +36,14 @@ class PipelineEngine:
 
     def __init__(self, config_path):
         self.config_path = config_path
-        self.cfg = self._load_config(config_path)
+        self.cfg = load_config_file(config_path)
 
         # Paths
-        self.json_workspace = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
-        self.json_output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        self.json_workspace = self.cfg.get("project",
+                                           {}).get("workspace_dir",
+                                                   "./workspace")
+        self.json_output_dir = self.cfg.get("project",
+                                            {}).get("output_dir", "./output")
 
         ensure_dir(self.json_workspace)
         ensure_dir(self.json_output_dir)
@@ -48,13 +51,6 @@ class PipelineEngine:
         self.quant_configurator = QuantizationConfigurator(self.cfg)
         self.converter = StandardConverter(self.cfg)
         self.recoverer = PrecisionRecoverer(self.cfg, )
-
-    # --------------------------------------------------------------------------
-    # Assist Methods
-    # --------------------------------------------------------------------------
-    def _load_config(self, path):
-        with open(path, "r") as f:
-            return yaml.safe_load(f)
 
     # --------------------------------------------------------------------------
     # Level 1: Main Entrance
@@ -74,8 +70,11 @@ class PipelineEngine:
         FAILED_MODELS = []
 
         # Preparation -- 4. Echo Startup Info
-        logger.info("==============================================================")
-        logger.info(f"=== Starting ArcFoundry Pipeline: {json_project_name} on {json_target_platform} ===")
+        logger.info(
+            "==============================================================")
+        logger.info(
+            f"=== Starting ArcFoundry Pipeline: {json_project_name} on {json_target_platform} ==="
+        )
 
         # Processing -- 1. Main Loop -- Process Each Model
         for json_model in json_models:
@@ -93,13 +92,27 @@ class PipelineEngine:
             logger.info(f"\n>>> Processing Model: {json_model_name}")
 
             # Preparation -- c. Make sure model file exists (Download if needed)
-            if not module_downloader.ensure_model(json_model_path, json_model_url):
-                logger.error(f"Skipping {json_model_name} due to missing input file and download failed.")
-                continue
+            retry_count = 0
+            retry_max = 10
+            while (not module_downloader.ensure_model(json_model_path,
+                                                      json_model_url)):
+                if (retry_count >= retry_max):
+                    logger.error(
+                        f"Failed to download {json_model_name} after {retry_max} attempts. Skipping this model."
+                    )
+                    return
+                else:
+                    retry_count += 1
+                    sleep(2)
+                    logger.warning(
+                        f"Attempt {retry_count}/{retry_max}: Failed to access model file for {json_model_name}. Retrying...\n"
+                    )
+                    continue
 
             # Preparation -- d. Define string of ONNX model path
             processed_onnx_name = f"{json_model_name}.processed.onnx"
-            processed_onnx_path = os.path.join(self.json_workspace, processed_onnx_name)
+            processed_onnx_path = os.path.join(self.json_workspace,
+                                               processed_onnx_name)
             logger.debug(f"ONNX model path: {processed_onnx_path}")
 
             # Processing -- a. Preprocessing Stage
@@ -119,7 +132,8 @@ class PipelineEngine:
 
             # Processing -- b. Build Configuration Preparation
             logger.info(f"\n===== II. Calibration Dataset =====")
-            final_json_build = self.quant_configurator.configure(json_model_name, processed_onnx_path)
+            final_json_build = self.quant_configurator.configure(
+                json_model_name, processed_onnx_path)
 
             # === [NEW] Dynamic Filename Strategy ===
             # Check the FINAL decision made by the configurator
@@ -129,19 +143,26 @@ class PipelineEngine:
                 precision_suffix = "fp16"
 
             # Preparation -- e. Check if quantization is enabled
-            is_quant = final_json_build.get('quantization', {}).get('enabled', False)
+            is_quant = final_json_build.get('quantization',
+                                            {}).get('enabled', False)
 
             # Construct the final output path with precision suffix
             rknn_output_name = f"{json_model_name}_{precision_suffix}.rknn"
-            rknn_output_path = os.path.join(self.json_output_dir, rknn_output_name)
+            rknn_output_path = os.path.join(self.json_output_dir,
+                                            rknn_output_name)
 
-            logger.info(f"🎯 Target Output: {rknn_output_path} (Precision: {precision_suffix.upper()})")
+            logger.info(
+                f"🎯 Target Output: {rknn_output_path} (Precision: {precision_suffix.upper()})"
+            )
 
             # Processing -- c. Execute Standard Conversion & Evaluation (Level 2)
-            logger.info(f"\n===== III. ONNX -> RKNN Conversion & Precision Verification =====")
+            logger.info(
+                f"\n===== III. ONNX -> RKNN Conversion & Precision Verification ====="
+            )
             score = self.converter.convert_and_evaluate(
-                json_target_platform, json_model_name, processed_onnx_path, rknn_output_path,
-                json_input_shapes, final_json_build, custom_string, json_model, json_normalization)
+                json_target_platform, json_model_name, processed_onnx_path,
+                rknn_output_path, json_input_shapes, final_json_build,
+                custom_string, json_model, json_normalization)
 
             # Processing -- d. Decision Point: If Precision is Low, Enter Recovery Flow (Level 3)
             #               Only trigger if quantization is enabled and score is low
@@ -149,25 +170,32 @@ class PipelineEngine:
 
             if is_quant and score < 0.99:
                 logger.debug(f"score={score}, entering precision recovery...")
-                self.recoverer._recover_precision(json_target_platform, json_model_name, processed_onnx_path,
-                                                  rknn_output_path, json_input_shapes, final_json_build,
-                                                  custom_string)
+                self.recoverer._recover_precision(
+                    json_target_platform, json_model_name, processed_onnx_path,
+                    rknn_output_path, json_input_shapes, final_json_build,
+                    custom_string)
 
             # Processing -- e. Finalize Single Model
             if os.path.exists(rknn_output_path):
                 success_count += 1
-                logger.info(f"✅ Completed Model: {json_model_name} -> {rknn_output_path}")
+                logger.info(
+                    f"✅ Completed Model: {json_model_name} -> {rknn_output_path}"
+                )
             else:
                 FAILED_MODELS.append(json_model_name)
                 logger.error(
-                    f"❌ Model conversion progress done, but rknn model {json_model_name} is checked not exists.")
+                    f"❌ Model conversion progress done, but rknn model {json_model_name} is checked not exists."
+                )
 
         # Processing -- 2. Final Summary
-        logger.info(f"\n=== Pipeline Completed: {success_count}/{len(json_models)} models successful ===")
+        logger.info(
+            f"\n=== Pipeline Completed: {success_count}/{len(json_models)} models successful ==="
+        )
         if FAILED_MODELS:
             logger.info(f"\nFailed Models: {FAILED_MODELS}\n")
 
         # === [MODIFIED] Cleanup using utility function ===
         cleanup_garbage()
 
-        logger.info("==============================================================")
+        logger.info(
+            "==============================================================")
