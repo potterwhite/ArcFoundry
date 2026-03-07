@@ -50,10 +50,12 @@ models:
     path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/encoder-epoch-99-avg-1.onnx"
     url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/encoder-epoch-99-avg-1.onnx"
     preprocess:
-      fix_dynamic_shape: true
-      simplify: false
       extract_metadata: true
-      strict_override: false
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: false
+      fix_int64_type: false
+      simplify: false
     input_shapes:
       # [batch=1, frames=71, features=80] comes from the inspection of the rknn from sherpa-onnx official
       x: [1, 71, 80]
@@ -62,11 +64,13 @@ models:
     path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/decoder-epoch-99-avg-1.onnx"
     url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/decoder-epoch-99-avg-1.onnx"
     preprocess:
-      fix_dynamic_shape: true
-      simplify: false
       extract_metadata: true
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: false
+      # [IMPORTANT]: the  "y" tensor of decoder must be int64
       fix_int64_type: true
-      strict_override: false
+      simplify: false
     input_shapes:
       y: [1, 512]
 
@@ -74,10 +78,12 @@ models:
     path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/joiner-epoch-99-avg-1.onnx"
     url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/joiner-epoch-99-avg-1.onnx"
     preprocess:
-      fix_dynamic_shape: true
-      simplify: false
       extract_metadata: true
-      strict_override: false
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: false
+      fix_int64_type: false
+      simplify: false
     input_shapes:
       encoder_out: [1, 512]
       decoder_out: [1, 512]

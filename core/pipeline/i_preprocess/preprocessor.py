@@ -24,6 +24,7 @@ import onnxruntime
 import os
 #from core.quantization import strategies
 from utils import logger
+from .dynamic_shape_fixer import DynamicShapeFixer
 
 
 class Preprocessor:
@@ -34,89 +35,6 @@ class Preprocessor:
 
     def __init__(self, config):
         self.cfg = config
-
-    def _fix_dynamic_shapes(self,
-                            model,
-                            json_input_shapes,
-                            json_strict_override=False):
-        """
-        Resolves dynamic dimensions in the ONNX model using a data-driven approach.
-
-        Behavior:
-        1. Explicit Mapping (Targeted): If a tensor name exists in `json_input_shapes` (YAML dict),
-        it precisely updates the dimensions to the specified values.
-        2. Implicit Fallback (Catch-all): If an ONNX input is NOT specified in YAML,
-        any dynamic dimensions (e.g., "batch", "T") will automatically default to 1.
-
-        Args:
-            model (onnx.ModelProto): The loaded ONNX model.
-            json_input_shapes (dict): Key-value pairs from YAML. e.g., {"image": [1, 3, 512, 512]}
-            json_strict_override (bool): If True, overrides all dimensions regardless of dynamic status.
-
-        Returns:
-            onnx.ModelProto: The model with fixed shapes.
-        """
-        # Enforce Dictionary format for mapping (Name -> Shape)
-        if not isinstance(json_input_shapes, dict):
-            logger.error(
-                f"json_input_shapes={json_input_shapes} is not a dictionary.")
-            raise ValueError("json_input_shapes MUST be a dictionary. \n"
-                             "Update your YAML format. Example:\n"
-                             "input_shapes:\n"
-                             "  input_tensor_name: [1, 3, 224, 224]")
-
-        model_inputs = model.graph.input
-        modified_count = 0
-
-        tensor_idx = 1
-        for input_tensor in model_inputs:
-            tensor_name = input_tensor.name
-            dims = input_tensor.type.tensor_type.shape.dim
-
-            # ---------------------------------------------------------
-            # Path A: Tensor is explicitly defined in YAML (e.g., ModNet 'image')
-            # ---------------------------------------------------------
-            if tensor_name in json_input_shapes:
-                target_shape = json_input_shapes[tensor_name]
-
-                if len(dims) != len(target_shape):
-                    raise ValueError(
-                        f"Rank mismatch for '{tensor_name}': "
-                        f"ONNX expects {len(dims)} dims, YAML provides {len(target_shape)} dims."
-                    )
-
-                for i, dim in enumerate(dims):
-                    is_dynamic = bool(dim.dim_param) or (dim.dim_value == 0)
-
-                    if json_strict_override or is_dynamic:
-                        logger.info(
-                            f"  - [Explicit] Fixing [{tensor_idx}]-'{tensor_name}' dim {i} to {target_shape[i]}"
-                        )
-                        dim.dim_param = ""
-                        dim.dim_value = int(target_shape[i])
-                modified_count += 1
-
-            # ---------------------------------------------------------
-            # Path B: Tensor NOT in YAML (e.g., 35 hidden states of Zipformer)
-            # Fallback to default: Convert dynamic dimensions to 1
-            # ---------------------------------------------------------
-            else:
-                for i, dim in enumerate(dims):
-                    if dim.dim_param:  # Identifies a dynamic symbolic dimension
-                        logger.debug(
-                            f"  - [Fallback] Auto-fixing unmapped dynamic dim '{dim.dim_param}' in [{tensor_idx}]-'{tensor_name}' to 1"
-                        )
-                        dim.dim_param = ""
-                        dim.dim_value = 1
-                        # Note: We do not increment modified_count here to keep focus on YAML-driven changes,
-                        # but you can add it if you want to track total changed tensors.
-
-            # Increment tensor index for logging clarity
-            tensor_idx += 1
-
-        logger.info(
-            f"Successfully fixed dynamic shapes for explicit YAML inputs.")
-        return model
 
     def _fix_int64_type(self, model):
         """Forces input type to INT64 (Crucial for Sherpa Decoder)."""
@@ -181,7 +99,7 @@ class Preprocessor:
         # Preparation -- 1. Define Variables
         current_model_path = model_path
         custom_string = None
-        modified = False
+        is_model_modified = False
 
         # Processing -- 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
         if json_strategies.get('extract_metadata', False):
@@ -217,23 +135,44 @@ class Preprocessor:
             return None, None
 
         # Processing -- 2. Fix Dynamic Shape
-        if json_strategies.get('fix_dynamic_shape', False):
+        # Validation -- 2.1. Strict API Check for Dynamic Shapes (Ensure it is a dict)
+        dyn_shape_cfg = json_strategies.get('fix_dynamic_shape', {})
+        if dyn_shape_cfg and not isinstance(dyn_shape_cfg, dict):
+            raise TypeError(
+                f"YAML Error: 'fix_dynamic_shape' must be a dictionary, got {type(dyn_shape_cfg).__name__}.\n"
+                "Please update your YAML config to include 'enabled' and 'strict_override' sub-keys."
+            )
+
+        # Processing -- 2.2. Strategy 2: Fix Dynamic Shape (Delegate to DynamicShapeFixer)
+        if dyn_shape_cfg.get('enabled', False):
             logger.info("Strategy (2/4): Fixing Dynamic Shapes...")
-            if self._fix_dynamic_shapes(model, model_shapes):
-                modified = True
+            strict_override = dyn_shape_cfg.get('strict_override', False)
+
+            shape_fixer = DynamicShapeFixer(model, model_shapes,
+                                            strict_override)
+            if shape_fixer.process():
+                is_model_modified = True
         else:
             logger.info("Strategy (2/4): Dynamic Shape Fixing Disabled.")
+        # -------------------------
+        # if json_strategies.get('fix_dynamic_shape', False):
+        #     logger.info("Strategy (2/4): Fixing Dynamic Shapes...")
+        #     if self._fix_dynamic_shapes(model, model_shapes):
+        #         is_model_modified = True
+        # else:
+        #     logger.info("Strategy (2/4): Dynamic Shape Fixing Disabled.")
+        # -------------------------
 
         # Processing -- 3. Fix INT64 Type (Decoder specific)
         if json_strategies.get('fix_int64_type', False):
             logger.info("Strategy (3/4): Fixing INT64 Types for inputs...")
             if self._fix_int64_type(model):
-                modified = True
+                is_model_modified = True
         else:
             logger.info("Strategy (3/4): INT64 Type Fixing Disabled.")
 
-        # Processing -- 4. Save intermediate if modified
-        if modified:
+        # Processing -- 4. Save intermediate if is_model_modified
+        if is_model_modified:
             logger.debug(f"Saving intermediate fixed model to {output_path}")
             onnx.save(model, output_path)
             current_model_path = output_path
