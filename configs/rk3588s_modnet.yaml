@@ -49,7 +49,9 @@ models:
     path: "models/downloads/modnet_photographic_portrait_matting.onnx"
     url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/modnet_photographic_portrait_matting.onnx"
     preprocess:
-      fix_dynamic_shape: true
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
       simplify: false
       extract_metadata: true
       strict_override: false  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
