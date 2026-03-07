@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 import os
+from time import sleep
 
 from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader, load_config_file
 
@@ -91,12 +92,22 @@ class PipelineEngine:
             logger.info(f"\n>>> Processing Model: {json_model_name}")
 
             # Preparation -- c. Make sure model file exists (Download if needed)
-            if not module_downloader.ensure_model(json_model_path,
-                                                  json_model_url):
-                logger.error(
-                    f"Skipping {json_model_name} due to missing input file and download failed."
-                )
-                continue
+            retry_count = 0
+            retry_max = 10
+            while (not module_downloader.ensure_model(json_model_path,
+                                                      json_model_url)):
+                if (retry_count >= retry_max):
+                    logger.error(
+                        f"Failed to download {json_model_name} after {retry_max} attempts. Skipping this model."
+                    )
+                    return
+                else:
+                    retry_count += 1
+                    sleep(2)
+                    logger.warning(
+                        f"Attempt {retry_count}/{retry_max}: Failed to access model file for {json_model_name}. Retrying...\n"
+                    )
+                    continue
 
             # Preparation -- d. Define string of ONNX model path
             processed_onnx_name = f"{json_model_name}.processed.onnx"

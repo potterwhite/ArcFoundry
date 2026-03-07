@@ -35,136 +35,6 @@ class Preprocessor:
     def __init__(self, config):
         self.cfg = config
 
-    # def _fix_dynamic_shapes(self, model, json_input_shapes):
-    # """Iterates through inputs and sets dim_param to 1."""
-    # changed = False
-    # for input_tensor in model.graph.input:
-    #     shape = input_tensor.type.tensor_type.shape
-    #     if shape:
-    #         for dim in shape.dim:
-    #             if dim.dim_param:
-    #                 logger.debug(f"  - Fixing dim '{dim.dim_param}' to 1 in input '{input_tensor.name}'")
-    #                 dim.ClearField("dim_param")
-    #                 dim.dim_value = 1
-    #                 changed = True
-    # return changed
-
-    # def _fix_dynamic_shapes(self,
-    #                         model,
-    #                         json_input_shapes,
-    #                         json_strict_override=False):
-    #     """
-    #     Fix dynamic input dimensions of an ONNX model
-    #     using json_input_shapes provided from YAML configuration.
-
-    #     Parameters
-    #     ----------
-    #     model : onnx.ModelProto
-    #         Loaded ONNX model.
-
-    #     json_input_shapes : list[list[int]]
-    #         List of shapes defined in YAML.
-    #         Each inner list corresponds to one model input.
-
-    #         Example:
-    #             [[1, 3, 512, 512]]
-    #             [[1, 16000]]
-    #             [[1, 80, 300]]
-
-    #     Returns
-    #     -------
-    #     onnx.ModelProto
-    #         Model with fixed input dimensions.
-    #     """
-
-    #     # ---------------------------------------------------------
-    #     # 1️⃣ Basic validation of json_input_shapes structure
-    #     # ---------------------------------------------------------
-    #     if not isinstance(json_input_shapes, list):
-    #         raise ValueError("json_input_shapes must be a list of shapes.")
-
-    #     if len(json_input_shapes) == 0:
-    #         raise ValueError("json_input_shapes cannot be empty.")
-
-    #     # Ensure every entry is a list of integers
-    #     for shape in json_input_shapes:
-    #         if not isinstance(shape, list):
-    #             raise ValueError(
-    #                 "Each element in json_input_shapes must be a list.")
-
-    #         for dim in shape:
-    #             if not isinstance(dim, int):
-    #                 raise ValueError(
-    #                     "All dimensions in json_input_shapes must be integers."
-    #                 )
-
-    #     # ---------------------------------------------------------
-    #     # 2️⃣ Get ONNX model inputs
-    #     # ---------------------------------------------------------
-    #     model_inputs = model.graph.input
-
-    #     if len(model_inputs) != len(json_input_shapes):
-    #         raise ValueError(
-    #             f"Input count mismatch: ONNX model has {len(model_inputs)} inputs, "
-    #             f"but YAML defines {len(json_input_shapes)} shapes.")
-
-    #     # ---------------------------------------------------------
-    #     # 3️⃣ Iterate over each input tensor
-    #     # ---------------------------------------------------------
-    #     for idx, input_tensor in enumerate(model_inputs):
-
-    #         target_shape = json_input_shapes[idx]
-    #         dims = input_tensor.type.tensor_type.shape.dim
-
-    #         # Validate rank consistency
-    #         if len(dims) != len(target_shape):
-    #             raise ValueError(
-    #                 f"Rank mismatch for input '{input_tensor.name}': "
-    #                 f"Model expects {len(dims)} dims, "
-    #                 f"but YAML defines {len(target_shape)} dims.")
-
-    #         # -----------------------------------------------------
-    #         # 4️⃣ Replace dynamic dimensions safely
-    #         # -----------------------------------------------------
-    #         for i, dim in enumerate(dims):
-    #             logger.debug(
-    #                 f"  - Processing dimension index {i}: "
-    #                 f"dim_param='{dim.dim_param}', dim_value={dim.dim_value}, "
-    #                 f"target_value={target_shape[i]}")
-
-    #             # Replace dimension safely
-    #             if json_strict_override:
-    #                 # Force override all dimensions
-    #                 dim.dim_param = ""
-    #                 dim.dim_value = int(target_shape[i])
-    #             else:
-    #                 # Detect dynamic dimension:
-    #                 # Case A: symbolic dimension (e.g., "batch", "height")
-    #                 # Case B: undefined dimension (dim_value == 0)
-    #                 is_dynamic = False
-
-    #                 if dim.dim_param:
-    #                     is_dynamic = True
-
-    #                 if dim.dim_value == 0:
-    #                     is_dynamic = True
-
-    #                 # Only override dynamic dimensions
-    #                 # This avoids accidentally changing fixed dimensions
-    #                 if is_dynamic:
-    #                     dim.dim_param = ""
-    #                     dim.dim_value = int(target_shape[i])
-
-    #         # Optional strict mode:
-    #         # If you want to force override ALL dims, remove is_dynamic check.
-
-    #     # # ---------------------------------------------------------
-    #     # # 5️⃣ Re-run shape inference to stabilize graph
-    #     # # ---------------------------------------------------------
-    #     # model = onnx.shape_inference.infer_shapes(model)
-
-    #     return model
-
     def _fix_dynamic_shapes(self,
                             model,
                             json_input_shapes,
@@ -198,6 +68,7 @@ class Preprocessor:
         model_inputs = model.graph.input
         modified_count = 0
 
+        tensor_idx = 1
         for input_tensor in model_inputs:
             tensor_name = input_tensor.name
             dims = input_tensor.type.tensor_type.shape.dim
@@ -218,8 +89,8 @@ class Preprocessor:
                     is_dynamic = bool(dim.dim_param) or (dim.dim_value == 0)
 
                     if json_strict_override or is_dynamic:
-                        logger.debug(
-                            f"  - [Explicit] Fixing '{tensor_name}' dim {i} to {target_shape[i]}"
+                        logger.info(
+                            f"  - [Explicit] Fixing [{tensor_idx}]-'{tensor_name}' dim {i} to {target_shape[i]}"
                         )
                         dim.dim_param = ""
                         dim.dim_value = int(target_shape[i])
@@ -233,12 +104,15 @@ class Preprocessor:
                 for i, dim in enumerate(dims):
                     if dim.dim_param:  # Identifies a dynamic symbolic dimension
                         logger.debug(
-                            f"  - [Fallback] Auto-fixing unmapped dynamic dim '{dim.dim_param}' in '{tensor_name}' to 1"
+                            f"  - [Fallback] Auto-fixing unmapped dynamic dim '{dim.dim_param}' in [{tensor_idx}]-'{tensor_name}' to 1"
                         )
                         dim.dim_param = ""
                         dim.dim_value = 1
                         # Note: We do not increment modified_count here to keep focus on YAML-driven changes,
                         # but you can add it if you want to track total changed tensors.
+
+            # Increment tensor index for logging clarity
+            tensor_idx += 1
 
         logger.info(
             f"Successfully fixed dynamic shapes for explicit YAML inputs.")
