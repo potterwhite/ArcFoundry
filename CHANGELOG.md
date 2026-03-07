@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0](https://github.com/potterwhite/ArcFoundry/compare/v0.11.0...v0.12.0) (2026-03-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* input_shapes format changed to dict, fix_dynamic_shape now object
+
+### ✨ Added
+
+* major refactor - new pipeline structure & named input_shapes ([#26](https://github.com/potterwhite/ArcFoundry/issues/26)) ([fd068db](https://github.com/potterwhite/ArcFoundry/commit/fd068db5a2dc00733ef628dd7df0fdde62833480))
+* refactor: split core/ into pipeline/ + utils/, remove redundant files
+* feat: support named input_shapes (e.g. x/y/encoder_out/decoder_out)
+* feat: DynamicShapeFixer + strict_override mode for shape fixing
+* feat: arc script shows clean config names without .yaml
+* chore: update .gitignore, normalize paths, remove ArcFoundry/ prefix
+* docs: update README & example configs
+
+---
+
 ## [0.11.0](https://github.com/potterwhite/ArcFoundry/compare/v0.10.0...v0.11.0) (2026-03-04)
 
 
