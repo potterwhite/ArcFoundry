@@ -21,7 +21,7 @@
 # core/quantization/calibrator.py
 
 import os
-from core.utils.utils import logger
+from utils import logger
 
 # Import the registry and strategies to ensure they are registered
 from .strategies import get_strategy_class

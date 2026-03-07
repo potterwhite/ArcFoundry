@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-from core.utils.utils import logger, ensure_dir
+from utils import logger, ensure_dir
 from . import register_strategy
 
 

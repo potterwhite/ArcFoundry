@@ -19,8 +19,8 @@
 # SOFTWARE.
 
 import os
-import yaml
-from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader
+
+from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader, load_config_file
 
 from .i_preprocess import Preprocessor
 from .ii_configuration import QuantizationConfigurator
@@ -35,7 +35,7 @@ class PipelineEngine:
 
     def __init__(self, config_path):
         self.config_path = config_path
-        self.cfg = self._load_config(config_path)
+        self.cfg = load_config_file(config_path)
 
         # Paths
         self.json_workspace = self.cfg.get("project",
@@ -50,13 +50,6 @@ class PipelineEngine:
         self.quant_configurator = QuantizationConfigurator(self.cfg)
         self.converter = StandardConverter(self.cfg)
         self.recoverer = PrecisionRecoverer(self.cfg, )
-
-    # --------------------------------------------------------------------------
-    # Assist Methods
-    # --------------------------------------------------------------------------
-    def _load_config(self, path):
-        with open(path, "r") as f:
-            return yaml.safe_load(f)
 
     # --------------------------------------------------------------------------
     # Level 1: Main Entrance

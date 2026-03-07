@@ -19,11 +19,24 @@
 # SOFTWARE.
 
 from .downloader import ModelDownloader
-from .utils import setup_logging, logger, ensure_dir, cleanup_garbage, timed_input, get_input_signature_from_yaml
+from .utils import timed_input
 from .input_signature import InputSignature
+from .file_utils import load_config_file, ensure_dir, cleanup_garbage, get_input_signature_from_yaml
+from .log_utils import setup_logging, logger
 
 __all__ = [
-    'ModelDownloader', 'setup_logging', 'logger', 'ensure_dir',
-    'cleanup_garbage', 'InputSignature', 'timed_input',
-    'get_input_signature_from_yaml'
+    # a. downloader.py
+    'ModelDownloader',
+    # b. log_utils.py
+    'setup_logging',
+    'logger',
+    # c. input_signature.py
+    'InputSignature',
+    # d. utils.py
+    'timed_input',
+    # e. file_utils.py
+    'ensure_dir',
+    'cleanup_garbage',
+    'get_input_signature_from_yaml',
+    'load_config_file'
 ]

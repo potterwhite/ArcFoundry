@@ -57,11 +57,11 @@ models:
       mean_values: [[127.5, 127.5, 127.5]]
       std_values: [[127.5, 127.5, 127.5]]
     input_shapes:
-      #- input: [1, 3, 288, 512]    # 161ms NO-STRANDS
-      - input: [1, 3, 384, 672]    # 270ms 2STARTS-CLEAR-STRANDS
-      #- input: [1, 3, 448, 800]  # 540ms 2STARTS-CLEAR-STRANDS 7CPU-TRANSPOSES
-      #- input: [1, 3, 576, 1024]  # 936ms 68/178/188/198/208/219/231-7CPU-TRANSPOSES
-      #- input: [1, 3, 864, 1536]  # 2334ms 68/79/86/97/134/146/156/166/178/188/198/208/219/231-14CPU-TRANSPOSES
-      #- input: [1, 3, 512, 512]  # Fixed 512x512 size for optimal NPU multi-core scheduling.
+      #input: [1, 3, 288, 512]    # 161ms NO-STRANDS
+      input: [1, 3, 384, 672]    # 270ms 2STARTS-CLEAR-STRANDS
+      #input: [1, 3, 448, 800]  # 540ms 2STARTS-CLEAR-STRANDS 7CPU-TRANSPOSES
+      #input: [1, 3, 576, 1024]  # 936ms 68/178/188/198/208/219/231-7CPU-TRANSPOSES
+      #input: [1, 3, 864, 1536]  # 2334ms 68/79/86/97/134/146/156/166/178/188/198/208/219/231-14CPU-TRANSPOSES
+      #input: [1, 3, 512, 512]  # Fixed 512x512 size for optimal NPU multi-core scheduling.
                           # Non-standard sizes like 512x896 cause multi-core scheduling failures,
                           # forcing layers to run on single core instead of 3-core parallel mode.

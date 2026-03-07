@@ -21,8 +21,8 @@
 import os
 import numpy as np
 import onnxruntime as ort
-# from core.utils.utils import logger, get_btf_from_yaml
-from core.utils.utils import logger, get_input_signature_from_yaml
+# from utils import logger, get_btf_from_yaml
+from utils import logger, get_input_signature_from_yaml
 from ._rknn_adapter import RKNNAdapter
 from ._comparator import ModelComparator
 from core.pipeline.ii_configuration.strategies.sherpa_features_extractor import SherpaFeatureExtractor
