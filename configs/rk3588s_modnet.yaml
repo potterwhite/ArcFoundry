@@ -33,7 +33,7 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  optimization_level: 2  # Changed to 3 (Aggressive) to see if it reduces CPU transposes
   verbose: true
   pruning: false
   eval_memory: false
@@ -52,9 +52,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: true
-      simplify: false
+      simplify: true
       extract_metadata: true
-      strict_override: false  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
+      strict_override: true  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
     normalization:
       mean_values: [[127.5, 127.5, 127.5]]
       std_values: [[127.5, 127.5, 127.5]]
