@@ -47,7 +47,12 @@ build:
 models:
   - name: "modnet"
     path: "models/downloads/modnet_photographic_portrait_matting.onnx"
-    url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/modnet_photographic_portrait_matting.onnx"
+    # -------
+    # Original ONNX from MODNet Author
+    # url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/photographic/modnet_photographic_portrait_matting.onnx"
+    # -------
+    # InstanceNormalization Folded ONNX model
+    url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/photographic/modnet_photographic_portrait_matting_in_folded.onnx"
     preprocess:
       fix_dynamic_shape:
         enabled: true
