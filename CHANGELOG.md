@@ -12,6 +12,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **preprocess:** enable ONNX simplify and strict shape override ([#28](https://github.com/potterwhite/ArcFoundry/issues/28)) ([6719dc8](https://github.com/potterwhite/ArcFoundry/commit/6719dc88687e994f6da5215e39c4c9dfd39704bc))
 
+- enable onnxsim simplification in preprocessing stage
+- enable strict_override to enforce deterministic input shapes
+- add debug logging for simplify I/O paths
+- update rk3588s MODNet config with input shape experiment notes
+
+Performance Notes:
+
+Through low-level NPU log inspection and graph analysis, I implemented an
+Anti-Fusion strategy by rewriting mathematically equivalent operators in the
+network graph. This prevents aggressive compiler fusion that previously caused
+cross-device tensor movement.
+
+As a result, all CPU transpose fallbacks were eliminated. At resolution
+576x1024, inference latency improved by ~40%. With full 3-core NPU scheduling
+enabled, the pipeline now reaches ~430ms.
+
+Benchmarking shows the pipeline is now approaching the RK3588S NPU memory
+bandwidth limit for high-resolution FP16 inference. Future optimization will
+focus on algorithm architecture and heterogeneous compute strategies rather
+than additional operator-level tuning.
+
+Note:
+The Anti-Fusion model modifications are stored in Helmsman.git.
+ArcFoundry remains a generic ONNX → RKNN conversion framework.
+
+
+
+
+---
+
 ## [0.12.0](https://github.com/potterwhite/ArcFoundry/compare/v0.11.0...v0.12.0) (2026-03-07)
 
 
