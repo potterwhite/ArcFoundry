@@ -52,6 +52,8 @@ class Preprocessor:
     def _simplify(self, input_path, output_path):
         """Wraps onnxsim."""
         try:
+            logger.debug(f"\tinput_path={input_path}")
+            logger.debug(f"\toutput_path={output_path}")
             model = onnx.load(input_path)
             model_simp, check = onnxsim.simplify(model)
             if check:

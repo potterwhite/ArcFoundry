@@ -33,7 +33,7 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  optimization_level: 2
   verbose: true
   pruning: false
   eval_memory: false
@@ -52,18 +52,33 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: true
-      simplify: false
+      simplify: true
       extract_metadata: true
-      strict_override: false  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
+      strict_override: true  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
     normalization:
       mean_values: [[127.5, 127.5, 127.5]]
       std_values: [[127.5, 127.5, 127.5]]
     input_shapes:
-      #input: [1, 3, 288, 512]    # 161ms NO-STRANDS
+      # -----------------
+      # Test: 256*256=65536 < 88064
+      # Mar11.2026: <60ms 3NPU |
+      # input: [1, 3, 256, 256]
+      # -----------------
+      # input: [1, 3, 384, 384]
+      # -----------------
+      # Mar11.2026: <
+      # input: [1, 3, 288, 512]
+      # -----------------
       # input: [1, 3, 384, 672]    # 270ms 2STARTS-CLEAR-STRANDS
-      #input: [1, 3, 448, 800]  # 540ms 2STARTS-CLEAR-STRANDS 7CPU-TRANSPOSES
-      input: [1, 3, 576, 1024]  # 936ms 68/178/188/198/208/219/231-7CPU-TRANSPOSES
+      # -----------------
+      #input: [1, 3, 448, 800]  # <540ms 2STARTS-CLEAR-STRANDS 7CPU-TRANSPOSES
+      # ---------------
+      # Mar05.2026: <936ms 68/178/188/198/208/219/231-7CPU-TRANSPOSES
+      # Mar11.2026: <571ms SingleNPU / Serialize Inferencing
+      input: [1, 3, 576, 1024]
+      # -----------------
       #input: [1, 3, 864, 1536]  # 2334ms 68/79/86/97/134/146/156/166/178/188/198/208/219/231-14CPU-TRANSPOSES
+      # -----------------
       #input: [1, 3, 512, 512]  # Fixed 512x512 size for optimal NPU multi-core scheduling.
                           # Non-standard sizes like 512x896 cause multi-core scheduling failures,
                           # forcing layers to run on single core instead of 3-core parallel mode.
