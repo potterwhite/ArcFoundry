@@ -1,0 +1,75 @@
+# Copyright (c) 2026 PotterWhite
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Phase-3-RKNN-PureBN: RKNN conversion config for Pure-BN retrained MODNet
+# Source model: modnet_bn_best_pureBN.onnx (0 InstanceNorm nodes, opset 11, 25MB)
+# Trained: 15 epochs on P3M-10k, Val L1 = 0.0086
+# DO NOT modify rk3588s_modnet.yaml — this file is isolated for pureBN conversion.
+
+project:
+  name: "modnet-pureBN-rk3588"
+  output_dir: "./output/pureBN_rk3588_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+  # device_id: null
+
+build:
+  # Optimization Level (0-3): Controls the aggressiveness of graph fusion.
+  # 0: Off / Debug. No optimization. Compiles the graph "as-is". Highest stability for sensitive ops.
+  # 1: Safe. Enables only basic and safe fusions.
+  # 2: Balanced. Standard optimizations suitable for most CV models.
+  # 3: Aggressive (Default). Max performance. May cause accuracy drop in Transformer/Conformer models.
+  optimization_level: 2
+  verbose: true
+  pruning: false
+  eval_memory: false
+
+  quantization:
+    enabled: false          # FP16 first — do NOT enable INT8 until board quality is confirmed
+    dtype: "asymmetric_quantized-8"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5
+
+models:
+  - name: "modnet_pureBN"
+    path: "/development/rk3588s_volume/src/ai/image-matting/primary-folder/helmsman.git/third-party/sdk/MODNet.git/pretrained/modnet_bn_best_pureBN.onnx"
+    # Local file — no url download needed.
+    # model is 0 InstanceNorm nodes (all IN replaced with BN), opset 11, 25MB
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      simplify: true
+      extract_metadata: true
+      strict_override: true  # Override all dims to match input_shapes below
+    normalization:
+      # IMPORTANT: normalization is baked-in here. The C++ frontend (RKNN path)
+      # must NOT manually normalize — RKNN runtime applies mean/std automatically.
+      # ONNX path: manual ÷127.5-1 in frontend.cpp preprocess()
+      # RKNN path: raw uint8 or float32 pixels, no manual normalization
+      mean_values: [[127.5, 127.5, 127.5]]
+      std_values: [[127.5, 127.5, 127.5]]
+    input_shapes:
+      # Starting point: 512x512 matches training resolution for quality comparison
+      # with Python/C++ ONNX native inference.
+      # Next step after board validation: test [1, 3, 576, 1024] for speed vs quality.
+      input: [1, 3, 512, 512]
