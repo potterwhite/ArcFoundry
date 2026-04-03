@@ -59,7 +59,6 @@ models:
         strict_override: true
       simplify: true
       extract_metadata: true
-      strict_override: true  # If true, will override all dimensions in the input shapes, even if they are not dynamic. Use with caution.
     normalization:
       mean_values: [[127.5, 127.5, 127.5]]
       std_values: [[127.5, 127.5, 127.5]]
