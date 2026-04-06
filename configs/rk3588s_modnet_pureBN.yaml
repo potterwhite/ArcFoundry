@@ -71,4 +71,8 @@ models:
       # Starting point: 512x512 matches training resolution for quality comparison
       # with Python/C++ ONNX native inference.
       # Next step after board validation: test [1, 3, 576, 1024] for speed vs quality.
-      input: [1, 3, 576, 1024]
+      # input: [1, 3, 576, 1024]
+      # input: [1, 3, 256, 256]
+      # input: [1, 3, 384, 384]
+      input: [1, 3, 288, 512]
+      
