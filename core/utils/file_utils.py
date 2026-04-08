@@ -118,6 +118,9 @@ def get_input_signature_from_yaml(cfg, model_name=None):
     if not input_shapes:
         raise ValueError(f"Model {model.get('name')} has no input_shapes.")
 
-    shape = input_shapes[0]
+    if isinstance(input_shapes, dict):
+        shape = list(input_shapes.values())[0]
+    else:
+        shape = input_shapes[0]
 
     return InputSignature(shape)

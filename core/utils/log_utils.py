@@ -98,4 +98,5 @@ def setup_logging(verbose=False):
 
 
 # Initialize a default logger instance for module-level usage
-logger = setup_logging(verbose=False)
+# logger = setup_logging(verbose=False)
+logger = setup_logging(verbose=True)

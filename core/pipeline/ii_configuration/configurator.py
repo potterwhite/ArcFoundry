@@ -129,6 +129,7 @@ class QuantizationConfigurator:
         # Processing -- 2. Try to get dataset path
         try:
             ds_path = self._get_dataset_path(onnx_path)
+            logger.info(f"ds_path={ds_path}")
 
             if ds_path and os.path.exists(ds_path):
                 json_build_duplicate['quantization']['dataset'] = ds_path
@@ -146,8 +147,8 @@ class QuantizationConfigurator:
             # Print the stack trace for debugging, but don't crash the pipeline
 
             error_msg = f"Calibration Generator crashed: {str(e)}"
-            # import traceback
-            # logger.error(traceback.format_exc())
+            import traceback
+            logger.error(traceback.format_exc())
 
             self._handle_fallback(error_msg)
             json_build_duplicate['quantization']['enabled'] = False

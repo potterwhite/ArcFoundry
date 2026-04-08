@@ -132,8 +132,12 @@ class VisionQuantizationStrategy:
         if not input_shapes:
             raise ValueError("No input_shapes found in model configuration")
 
-        # Assume NCHW format: [batch, channels, height, width]
-        input_shape = input_shapes[0]
+        # Support both list format (old) and dict format (new: {name: shape})
+        if isinstance(input_shapes, dict):
+            input_shape = list(input_shapes.values())[0]
+        else:
+            # Assume NCHW format: [batch, channels, height, width]
+            input_shape = input_shapes[0]
         if len(input_shape) != 4:
             raise ValueError(f"Expected 4D input shape, got {input_shape}")
 
