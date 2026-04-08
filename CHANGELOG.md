@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0](https://github.com/potterwhite/ArcFoundry/compare/v0.13.0...v0.14.0) (2026-04-08)
+
+
+### ✨ Added
+
+* **config:** add rk3588s_modnet_pureBN_int8.yaml for INT8 quantization (576x1024) ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+* **config:** add rk3588s_modnet_pureBN.yaml for FP16 conversion (288x512) ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+* Pure-BN MODNet RKNN conversion + hybrid quantization robustness ([#31](https://github.com/potterwhite/ArcFoundry/issues/31)) ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+
+
+### 🐛 Fixed
+
+* **hybrid:** auto-retry hybrid step2 by removing immutable dtype tensors (max 10x) ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+* **hybrid:** gracefully handle RKNN SDK SE Block KeyError in _p_adjust_tanh_sigmoid ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+* **int8:** support dict-format input_shapes in vision strategy and file_utils ([838b273](https://github.com/potterwhite/ArcFoundry/commit/838b2736b90ce38bc022c4d9b77fc374f3f95045))
+
 ## [0.13.0](https://github.com/potterwhite/ArcFoundry/compare/v0.12.0...v0.13.0) (2026-03-12)
 
 
