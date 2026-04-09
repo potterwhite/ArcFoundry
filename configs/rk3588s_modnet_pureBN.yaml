@@ -58,6 +58,10 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: true
+      fold_constant_inputs:
+        enabled: false   # MODNet has no scalar control inputs to fold
+        inputs: {}
+      fix_int64_type: false
       simplify: false
       extract_metadata: true
     normalization:

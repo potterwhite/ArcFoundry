@@ -54,6 +54,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer encoder has no scalar control inputs to fold
+        inputs: {}
       fix_int64_type: false
       simplify: false
     input_shapes:
@@ -68,6 +71,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer decoder has no scalar control inputs to fold
+        inputs: {}
       # [IMPORTANT]: the  "y" tensor of decoder must be int64
       fix_int64_type: true
       simplify: false
@@ -82,6 +88,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer joiner has no scalar control inputs to fold
+        inputs: {}
       fix_int64_type: false
       simplify: false
     input_shapes:
