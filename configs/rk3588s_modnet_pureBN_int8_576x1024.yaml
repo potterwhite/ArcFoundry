@@ -24,7 +24,7 @@
 # DO NOT modify rk3588s_modnet.yaml — this file is isolated for pureBN conversion.
 
 project:
-  name: "modnet-pureBN-rk3588-int8"
+  name: "rk3588s_modnet_pureBN_int8_576x1024"
   output_dir: "./output/pureBN_rk3588_int8_release"
   workspace_dir: "./workspace/tmp"
 

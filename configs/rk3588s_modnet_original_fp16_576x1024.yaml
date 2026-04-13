@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 project:
-  name: "modnet-rk3588"
+  name: "rk3588s_modnet_original_fp16_576x1024"
   output_dir: "./output/rk3588_release"
   workspace_dir: "./workspace/tmp"
 
