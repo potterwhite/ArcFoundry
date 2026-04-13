@@ -1,0 +1,85 @@
+# Copyright (c) 2026 PotterWhite
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Round 2 RVM Phase-4 Block 4.2: INT8 RKNN conversion config for RVM MobileNetV3 @ 256x256
+# Based on: rk3588s_rvm_mobilenetv3_256x256_fp16.yaml (Phase-2 Block 2.5)
+# Source model: rvm_mobilenetv3_fp32.onnx (opset 12, 14.3MB, 0 InstanceNorm, no refiner)
+#
+# Quantization: asymmetric INT8, KL divergence calibration
+# Calibration: 300 images from P3M-10k train (calibration_list.txt)
+#
+# FP16 baseline: ~20.5ms @ 256x256 (Phase-2 Block 2.5)
+# INT8 target: <15ms @ 256x256 (1.3-1.8x speedup expected)
+#
+# Key risk: ConvGRU recurrent state precision drift under INT8.
+# Mitigation: if drift detected in Block 4.5, switch to hybrid precision (Block 4.6).
+
+project:
+  name: "rvm-mobilenetv3-256x256-int8-rk3588"
+  output_dir: "./output/rvm_mobilenetv3_256x256_int8_rk3588_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+
+build:
+  optimization_level: 2
+  verbose: true
+  pruning: false
+  eval_memory: false
+
+  quantization:
+    enabled: true                             # ← INT8 enabled
+    dtype: "asymmetric_quantized-8"           # asymmetric INT8 (scale + zero_point)
+    dataset: "./data/calibration_list.txt"    # 300 images from P3M-10k train
+    sampling_interval: 5
+
+models:
+  - name: "rvm_mobilenetv3_256x256_int8"
+    path: "models/downloads/rvm_mobilenetv3.onnx"
+    url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      fold_constant_inputs:
+        enabled: true
+        inputs:
+          # downsample_ratio=0.25: 256x256 src → 64x64 processing resolution
+          downsample_ratio: [0.25]
+      fix_int64_type: false
+      simplify: true
+      extract_metadata: true
+    normalization:
+      mean_values: [[0, 0, 0]]
+      std_values: [[255, 255, 255]]
+    input_shapes:
+      # --- Primary input ---
+      src: [1, 3, 256, 256]
+      # --- ConvGRU recurrent states ---
+      # Processing resolution: dH=dW=64 (256*0.25=64, exact integer)
+      # r1: stride-2  → 64/2=32,  64/2=32
+      # r2: stride-4  → 64/4=16,  64/4=16
+      # r3: stride-8  → 64/8=8,   64/8=8
+      # r4: stride-16 → 64/16=4,  64/16=4
+      r1i: [1, 16, 32, 32]
+      r2i: [1, 20, 16, 16]
+      r3i: [1, 40,  8,  8]
+      r4i: [1, 64,  4,  4]
