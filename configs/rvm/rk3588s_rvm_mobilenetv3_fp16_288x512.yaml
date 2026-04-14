@@ -29,7 +29,7 @@
 #
 # Key r4i shape: [1,64,5,8] — uses ceil(72/16)=5, NOT floor. See Block 1.1 log.
 #
-# INT8 config: configs/rk3588s_rvm_mobilenetv3_int8.yaml (Phase-4, not yet created)
+# INT8 config: configs/rvm/rk3588s_rvm_mobilenetv3_256x256_int8.yaml (Phase-4)
 
 project:
   name: "rk3588s_rvm_mobilenetv3_fp16_288x512"
