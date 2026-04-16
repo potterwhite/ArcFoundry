@@ -96,6 +96,7 @@ func_1_4_show_help() {
 func_1_5_install_rknn() {
     # 1. Check if already installed
     if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        func_1_1_log "RKNN Toolkit2 already installed in the virtual environment."
         return 0
     fi
 
@@ -299,6 +300,8 @@ func_2_1_setup_venv() {
             return 1
         fi
         "${PIP_BIN}" install --upgrade pip
+    else
+        func_1_1_log "Virtual environment already exists. Skipping creation."
     fi
 
     # 2. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
@@ -309,6 +312,8 @@ func_2_1_setup_venv() {
     if ! "${PYTHON_BIN}" -c "import requests, tqdm, yaml" &> /dev/null; then
         func_1_1_log "\nInstalling/Updating project dependencies from envs/requirements.txt ..."
         "${PIP_BIN}" install -r "${SDK_ROOT}/envs/requirements.txt"
+    else
+        func_1_1_log "Project dependencies already satisfied."
     fi
 
     # 4. Validate RKNN + OpenCV stack, and auto-switch to headless OpenCV when needed
