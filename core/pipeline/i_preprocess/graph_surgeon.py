@@ -66,7 +66,16 @@ class GraphSurgeon:
                 modified |= self._modify_outputs(graph, outputs_cfg['modify'])
 
         if modified:
+            # Ensure replacement tensors retain dtype after cleanup
+            # (cleanup may strip metadata from intermediate tensors)
+            for out in graph.outputs:
+                if out.dtype is None:
+                    out.dtype = np.float32
             graph.cleanup().toposort()
+            # Re-apply dtype after cleanup (cleanup may strip again)
+            for out in graph.outputs:
+                if out.dtype is None:
+                    out.dtype = np.float32
             self.model = gs.export_onnx(graph)
 
         return modified
