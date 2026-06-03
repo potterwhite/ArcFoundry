@@ -1,8 +1,8 @@
 # Copyright (c) 2026 PotterWhite — MIT License
 #
-# Configuration: rk3588s_rvm_mobilenetv3_fp16_1080x1920_0.5-dsr
+# Configuration: rk3588s_rvm_mobilenetv3_fp16_1080x1920_0.25-dsr
 # Resolution: 1080x1920
-# Downsample Ratio: 0.5
+# Downsample Ratio: 0.25
 # Precision: fp16
 # Has Refiner: True
 #
@@ -21,8 +21,8 @@
 #   - Expected NPU saving: ~34ms (-28%)
 
 project:
-  name: "rvm_mobilenetv3_fp16_1080x1920_rk3588_0.5-dsr"
-  output_dir: "./output/rvm_mobilenetv3_fp16_1080x1920_0.5-dsr_rk3588_release"
+  name: "rvm_mobilenetv3_fp16_1080x1920_rk3588"
+  output_dir: "./output/rvm_mobilenetv3_fp16_1080x1920_rk3588_release"
   workspace_dir: "./workspace/tmp"
 
 target:
@@ -47,7 +47,7 @@ build:
     sampling_interval: 5
 
 models:
-  - name: "rvm_mobilenetv3_fp16_1080x1920_0.5-dsr_rk3588"
+  - name: "rvm_mobilenetv3_fp16_1080x1920_rk3588"
     path: "models/downloads/rvm_mobilenetv3.onnx"
     url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
     # Model properties:
@@ -63,9 +63,9 @@ models:
         enabled: true
         inputs:
           # downsample_ratio controls RVM's internal resize scale.
-          # Fixed at 0.5: 1080x1920 src → 540x960 processing resolution.
+          # Fixed at 0.25: 1080x1920 src → 270x480 processing resolution.
           # After folding: graph has 5 inputs (src + r1i~r4i). downsample_ratio disappears.
-          downsample_ratio: [0.5]
+          downsample_ratio: [0.25]
       graph_surgery:
         enabled: true
         outputs:
@@ -88,12 +88,12 @@ models:
       # --- Primary input ---
       src: [1, 3, 1080, 1920]
       # --- ConvGRU recurrent states ---
-      # dH = round(1080 * 0.5) = 540,  dW = round(1920 * 0.5) = 960
-      # r1: stride-2  → ceil(540/2)=270,  ceil(960/2)=480
-      # r2: stride-4  → ceil(540/4)=135,   ceil(960/4)=240
-      # r3: stride-8  → ceil(540/8)=68,   ceil(960/8)=120
-      # r4: stride-16 → ceil(540/16)=34,  ceil(960/16)=60  ← ceil matters here
-      r1i: [1, 16, 270, 480]
-      r2i: [1, 20,  135, 240]
-      r3i: [1, 40,  68,  120]
-      r4i: [1, 64,  34,  60]
+      # dH = round(1080 * 0.25) = 270,  dW = round(1920 * 0.25) = 480
+      # r1: stride-2  → ceil(270/2)=135,  ceil(480/2)=240
+      # r2: stride-4  → ceil(270/4)=68,   ceil(480/4)=120
+      # r3: stride-8  → ceil(270/8)=34,   ceil(480/8)=60
+      # r4: stride-16 → ceil(270/16)=17,  ceil(480/16)=30  ← ceil matters here
+      r1i: [1, 16, 135, 240]
+      r2i: [1, 20,  68, 120]
+      r3i: [1, 40,  34,  60]
+      r4i: [1, 64,  17,  30]

@@ -1,24 +1,38 @@
-# Copyright (c) 2026 PotterWhite — MIT License
+# Copyright (c) 2026 PotterWhite
 #
-# Configuration: rk3588s_rvm_mobilenetv3_fp16_1080x1920_0.5-dsr
-# Resolution: 1080x1920
-# Downsample Ratio: 0.5
-# Precision: fp16
-# Has Refiner: True
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-# Changelog:
-#   2026-06-03: Unified optimization settings (s5_8_22_15)
-#     - optimization_level: 2 → 3 (aggressive graph fusion)
-#     - pruning: false → true (enable graph pruning)
-#     - Added graph_surgery: outputs.modify (remove DeepGuidedFilterRefiner)
-#     - Standardized naming: removed oplv3/no-resize suffixes
-#     - Added dsr suffix to all configs for clarity
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-# Notes:
-#   - graph_surgery removes Resize×2 + element-wise tail from refiner
-#   - NPU outputs A(4ch, low-res) + b(4ch, low-res) instead of fgr+pha
-#   - C++ Postprocess performs guided filter combination
-#   - Expected NPU saving: ~34ms (-28%)
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# MR2-P5 RKNN 1080x1920 FP16 config — diagnostic experiment for resolution root-cause analysis
+# Purpose: determine whether frame-62 alpha collapse is due to low input resolution (288x512)
+#          or RKNN conversion quality. See log-MR2-P5-rknn-inference.md §14.
+# Source model: rvm_mobilenetv3_fp32.onnx (opset 12, 14.3MB, 0 InstanceNorm, no refiner)
+#
+# 6 graph inputs (before ArcFoundry fold):
+#   src [1,3,1080,1920], r1i [1,16,135,240], r2i [1,20,68,120],
+#   r3i [1,40,34,60], r4i [1,64,17,30], downsample_ratio [1]
+# After fold_constant_inputs: 5 inputs (downsample_ratio promoted to constant)
+#
+# Shape derivation (dsr=0.25, dH=round(1080*0.25)=270, dW=round(1920*0.25)=480):
+#   r1i: stride-2  → ceil(270/2)=135,  ceil(480/2)=240
+#   r2i: stride-4  → ceil(270/4)=68,   ceil(480/4)=120
+#   r3i: stride-8  → ceil(270/8)=34,   ceil(480/8)=60
+#   r4i: stride-16 → ceil(270/16)=17,  ceil(480/16)=30  ← ceil matters
 
 project:
   name: "rvm_mobilenetv3_fp16_1080x1920_rk3588_0.5-dsr"
@@ -35,9 +49,9 @@ build:
   # 1: Safe. Basic and safe fusions only.
   # 2: Balanced. Standard for most CV models. ← Used here.
   # 3: Aggressive. Max performance. Avoid for Transformer/Conformer models.
-  optimization_level: 3
+  optimization_level: 2
   verbose: true
-  pruning: true
+  pruning: false
   eval_memory: false
 
   quantization:
@@ -66,14 +80,6 @@ models:
           # Fixed at 0.5: 1080x1920 src → 540x960 processing resolution.
           # After folding: graph has 5 inputs (src + r1i~r4i). downsample_ratio disappears.
           downsample_ratio: [0.5]
-      graph_surgery:
-        enabled: true
-        outputs:
-          modify:
-            - existing: "fgr"        # ONNX graph output tensor name
-              replacement: "777"     # Conv_316 output (refiner A, 4ch, low-res)
-            - existing: "pha"        # ONNX graph output tensor name
-              replacement: "779"     # Sub_318 output (refiner b, 4ch, low-res)
       fix_int64_type: false
       simplify: true        # Folds Shape→Slice→Concat chains; equivalent to onnxsim
       extract_metadata: true

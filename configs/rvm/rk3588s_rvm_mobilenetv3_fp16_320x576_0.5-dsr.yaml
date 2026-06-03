@@ -1,26 +1,24 @@
-# Copyright (c) 2026 PotterWhite
+# Copyright (c) 2026 PotterWhite — MIT License
 #
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
+# Configuration: rk3588s_rvm_mobilenetv3_fp16_320x576_0.5-dsr
+# Resolution: 320x576
+# Downsample Ratio: 0.5
+# Precision: fp16
+# Has Refiner: True
 #
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
+# Changelog:
+#   2026-06-03: Unified optimization settings (s5_8_22_15)
+#     - optimization_level: 2 → 3 (aggressive graph fusion)
+#     - pruning: false → true (enable graph pruning)
+#     - Added graph_surgery: outputs.modify (remove DeepGuidedFilterRefiner)
+#     - Standardized naming: removed oplv3/no-resize suffixes
+#     - Added dsr suffix to all configs for clarity
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-# MR2-P5 §34 — dsr=0.5 compensation test (s34)
-# r-state: 282,240 elements (1.08 MB)
-# dH = round(320*0.5) = 160, dW = round(576*0.5) = 288
+# Notes:
+#   - graph_surgery removes Resize×2 + element-wise tail from refiner
+#   - NPU outputs A(4ch, low-res) + b(4ch, low-res) instead of fgr+pha
+#   - C++ Postprocess performs guided filter combination
+#   - Expected NPU saving: ~34ms (-28%)
 
 project:
   name: "rvm_mobilenetv3_fp16_320x576_rk3588_0.5-dsr"
@@ -31,9 +29,9 @@ target:
   platform: "rk3588"
 
 build:
-  optimization_level: 2
+  optimization_level: 3
   verbose: true
-  pruning: false
+  pruning: true
   eval_memory: false
   quantization:
     enabled: false
@@ -53,6 +51,14 @@ models:
         enabled: true
         inputs:
           downsample_ratio: [0.5]
+      graph_surgery:
+        enabled: true
+        outputs:
+          modify:
+            - existing: "fgr"        # ONNX graph output tensor name
+              replacement: "777"     # Conv_316 output (refiner A, 4ch, low-res)
+            - existing: "pha"        # ONNX graph output tensor name
+              replacement: "779"     # Sub_318 output (refiner b, 4ch, low-res)
       fix_int64_type: false
       simplify: true
       extract_metadata: true
