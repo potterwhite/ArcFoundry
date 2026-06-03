@@ -20,5 +20,6 @@
 
 from .preprocessor import Preprocessor
 from .constant_input_folder import ConstantInputFolder
+from .graph_surgeon import GraphSurgeon
 
-__all__ = ['Preprocessor', 'ConstantInputFolder']
+__all__ = ['Preprocessor', 'ConstantInputFolder', 'GraphSurgeon']
