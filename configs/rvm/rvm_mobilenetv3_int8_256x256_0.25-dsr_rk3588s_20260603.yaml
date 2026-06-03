@@ -1,6 +1,6 @@
 # Copyright (c) 2026 PotterWhite — MIT License
 #
-# Configuration: rk3588s_rvm_mobilenetv3_int8_256x256_0.25-dsr
+# Configuration: rvm_mobilenetv3_int8_256x256_0.25-dsr_rk3588s_20260603
 # Resolution: 256x256
 # Downsample Ratio: 0.25
 # Precision: int8
@@ -37,7 +37,7 @@ build:
   quantization:
     enabled: true                             # ← INT8 enabled
     dtype: "asymmetric_quantized-8"           # asymmetric INT8 (scale + zero_point)
-    dataset: "./data/calibration_list.txt"    # 300 images from P3M-10k train
+    dataset: "./data/calibration_int8_200items.txt"
     sampling_interval: 5
 
 models:
