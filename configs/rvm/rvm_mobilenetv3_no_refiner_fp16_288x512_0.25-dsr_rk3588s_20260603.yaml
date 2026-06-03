@@ -1,6 +1,6 @@
 # Copyright (c) 2026 PotterWhite — MIT License
 #
-# Configuration: rk3588s_rvm_mobilenetv3_no_refiner_fp16_288x512_0.25-dsr
+# Configuration: rvm_mobilenetv3_no_refiner_fp16_288x512_0.25-dsr_rk3588s_20260603
 # Resolution: 288x512
 # Downsample Ratio: 0.25
 # Precision: fp16
@@ -41,7 +41,7 @@ build:
 models:
   - name: "rvm_mobilenetv3_no_refiner_fp16_288x512_0.25-dsr_rk3588s_20260603_rk3588"
     path: "models/downloads/rvm_mobilenetv3_no_refiner.onnx"
-    url: null               # 本地文件，不从网络下载
+    url: "https://huggingface.co/PotterWhite/MODNet/resolve/model%2Frvm/RobustVideoMatting/onnx/rvm_mobilenetv3_fp32_no_refiner.onnx"
     # Model properties:
     #   - opset 12, 337 nodes, 15MB FP32
     #   - 无 Refiner（FastGuidedFilterRefiner 已跳过）
