@@ -9,13 +9,65 @@
 
 ArcFoundry 使用单个 YAML 文件定义整个转换流水线。配置文件通过 `yaml.safe_load` 加载为 Python dict，各模块自行校验所需的 key。
 
-**配置文件位置**：`configs/<model_family>/<platform>_<model>_<precision>_<HxW>[_dsr].yaml`
+**配置文件位置**：`configs/<model_family>/<命名规范>.yaml`
 
 **运行方式**：
 ```bash
 ./arc <config_name>        # 快捷模式，自动匹配 configs/ 下的文件
 ./arc configs/custom.yaml  # 显式路径模式
 ```
+
+---
+
+## 1.1 配置文件命名规范
+
+配置文件命名遵循以下格式：
+
+```
+{模型名}[_变体]_{精度}_{分辨率}_{dsr}[_平台][_日期].yaml
+```
+
+**字段说明**：
+
+| 字段 | 必需 | 说明 | 示例 |
+|------|------|------|------|
+| 模型名 | ✓ | 模型架构名称 | `rvm_mobilenetv3`, `modnet`, `sherpa` |
+| 变体 | | 模型变体（可选） | `no_refiner`, `with_resize`, `lightweight` |
+| 精度 | ✓ | 模型精度 | `fp16`, `int8`, `fp32` |
+| 分辨率 | ✓ | 输入分辨率 | `544x960`, `288x512`, `1080x1920` |
+| dsr | ✓ | 下采样率 | `0.25-dsr`, `0.5-dsr`, `1.0-dsr` |
+| 平台 | | 目标平台（可选） | `rk3588s`, `rk3588`, `rv1126b` |
+| 日期 | | 创建日期（可选） | `20260603`, `20260101` |
+
+**命名示例**：
+
+```bash
+# 标准版
+rvm_mobilenetv3_fp16_544x960_0.5-dsr_rk3588s_20260603.yaml
+
+# 无 refiner 版（变体）
+rvm_mobilenetv3_no_refiner_fp16_288x512_0.25-dsr_rk3588s_20260603.yaml
+
+# INT8 量化版
+rvm_mobilenetv3_int8_288x512_0.25-dsr_rk3588s_20260603.yaml
+
+# 无平台和日期（简化版）
+rvm_mobilenetv3_fp16_544x960_0.5-dsr.yaml
+```
+
+**命名规则**：
+
+1. **一致性**：文件名必须与 `project.name` 字段完全一致（不含 `.yaml` 后缀）
+2. **可选字段**：变体、平台、日期是可选的，可根据需要省略
+3. **分隔符**：字段之间使用 `_` 分隔，dsr 值使用 `-` 连接（如 `0.5-dsr`）
+4. **变体命名**：变体使用下划线分隔的单词（如 `no_refiner`, `with_resize`）
+
+**国际参考**：
+
+本命名规范参考了 TensorFlow Model Garden、ONNX Model Zoo、NVIDIA TensorRT 等国际标准：
+- TensorFlow: `efficientnet-b0_fp32_224x224`
+- ONNX: `resnet50_fp32_224x224`
+- TensorRT: `resnet50_fp32_224x224_trt`
 
 ---
 

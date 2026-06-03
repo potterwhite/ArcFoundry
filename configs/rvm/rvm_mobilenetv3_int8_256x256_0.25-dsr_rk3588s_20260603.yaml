@@ -1,9 +1,9 @@
 # Copyright (c) 2026 PotterWhite — MIT License
 #
-# Configuration: rk3588s_rvm_mobilenetv3_fp16_1080x1920_0.125-dsr
-# Resolution: 1080x1920
-# Downsample Ratio: 0.125
-# Precision: fp16
+# Configuration: rk3588s_rvm_mobilenetv3_int8_256x256_0.25-dsr
+# Resolution: 256x256
+# Downsample Ratio: 0.25
+# Precision: int8
 # Has Refiner: True
 #
 # Changelog:
@@ -21,8 +21,8 @@
 #   - Expected NPU saving: ~34ms (-28%)
 
 project:
-  name: "rvm_mobilenetv3_fp16_1080x1920_rk3588_0.125-dsr"
-  output_dir: "./output/rvm_mobilenetv3_fp16_1080x1920_0.125-dsr_rk3588_release"
+  name: "rvm_mobilenetv3_int8_256x256_0.25-dsr_rk3588s_20260603"
+  output_dir: "./output/rvm_mobilenetv3_int8_256x256_0.25-dsr_rk3588s_20260603_release"
   workspace_dir: "./workspace/tmp"
 
 target:
@@ -33,14 +33,15 @@ build:
   verbose: true
   pruning: true
   eval_memory: false
+
   quantization:
-    enabled: false
-    dtype: "asymmetric_quantized-8"
-    dataset: "./data/calibration_list.txt"
+    enabled: true                             # ← INT8 enabled
+    dtype: "asymmetric_quantized-8"           # asymmetric INT8 (scale + zero_point)
+    dataset: "./data/calibration_list.txt"    # 300 images from P3M-10k train
     sampling_interval: 5
 
 models:
-  - name: "rvm_mobilenetv3_fp16_1080x1920_0.125-dsr_rk3588"
+  - name: "rvm_mobilenetv3_int8_256x256_0.25-dsr_rk3588s_20260603_rk3588"
     path: "models/downloads/rvm_mobilenetv3.onnx"
     url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
     preprocess:
@@ -50,7 +51,8 @@ models:
       fold_constant_inputs:
         enabled: true
         inputs:
-          downsample_ratio: [0.125]
+          # downsample_ratio=0.25: 256x256 src → 64x64 processing resolution
+          downsample_ratio: [0.25]
       graph_surgery:
         enabled: true
         outputs:
@@ -66,8 +68,15 @@ models:
       mean_values: [[0, 0, 0]]
       std_values: [[255, 255, 255]]
     input_shapes:
-      src: [1, 3, 1080, 1920]
-      r1i: [1, 16, 68, 120]
-      r2i: [1, 20, 34, 60]
-      r3i: [1, 40, 17, 30]
-      r4i: [1, 64, 9, 15]
+      # --- Primary input ---
+      src: [1, 3, 256, 256]
+      # --- ConvGRU recurrent states ---
+      # Processing resolution: dH=dW=64 (256*0.25=64, exact integer)
+      # r1: stride-2  → 64/2=32,  64/2=32
+      # r2: stride-4  → 64/4=16,  64/4=16
+      # r3: stride-8  → 64/8=8,   64/8=8
+      # r4: stride-16 → 64/16=4,  64/16=4
+      r1i: [1, 16, 32, 32]
+      r2i: [1, 20, 16, 16]
+      r3i: [1, 40,  8,  8]
+      r4i: [1, 64,  4,  4]
