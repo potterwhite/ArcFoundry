@@ -94,7 +94,7 @@ class PrecisionRecoverer:
         onnx_basename = os.path.basename(onnx_path)
         model_prefix = os.path.splitext(onnx_basename)[0]
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
-        tmp_dir = os.path.join(self.workspace_dir, "tmp")
+        tmp_dir = self.workspace_dir
         return {
             'cfg':          os.path.join(tmp_dir, f"{model_prefix}.quantization.cfg"),
             'model':        os.path.join(tmp_dir, f"{model_prefix}.model"),
