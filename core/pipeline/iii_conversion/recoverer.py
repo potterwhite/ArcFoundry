@@ -41,6 +41,7 @@ class PrecisionRecoverer:
     def __init__(self, global_config):
         self.cfg = global_config
         self.output_dir = self.cfg.get("project", {}).get("output_dir", "./output")
+        self.workspace_dir = self.cfg.get("project", {}).get("workspace_dir", "./workspace")
 
     # --------------------------------------------------------------------------
     # Public Entry Point
@@ -60,7 +61,8 @@ class PrecisionRecoverer:
         paths = self._prepare_hybrid_paths(onnx_path, model_name)
 
         adapter = self._run_hybrid_step1(
-            target_plat, onnx_path, input_shapes, base_build_config, custom_string)
+            target_plat, onnx_path, input_shapes, base_build_config, custom_string,
+            paths['tmp_dir'])
         if adapter is None:
             return
 
@@ -92,15 +94,17 @@ class PrecisionRecoverer:
         onnx_basename = os.path.basename(onnx_path)
         model_prefix = os.path.splitext(onnx_basename)[0]
         analysis_dir = os.path.join(self.output_dir, "analysis", model_name)
+        tmp_dir = os.path.join(self.workspace_dir, "tmp")
         return {
-            'cfg':          f"{model_prefix}.quantization.cfg",
-            'model':        f"{model_prefix}.model",
-            'data':         f"{model_prefix}.data",
+            'cfg':          os.path.join(tmp_dir, f"{model_prefix}.quantization.cfg"),
+            'model':        os.path.join(tmp_dir, f"{model_prefix}.model"),
+            'data':         os.path.join(tmp_dir, f"{model_prefix}.data"),
             'error_report': os.path.join(analysis_dir, "error_analysis.txt"),
+            'tmp_dir':      tmp_dir,
         }
 
     def _run_hybrid_step1(self, target_plat, onnx_path, input_shapes,
-                          base_build_config, custom_string):
+                          base_build_config, custom_string, tmp_dir):
         """
         Prompt user to confirm, then run hybrid_quantization_step1.
         Returns a configured RKNNAdapter on success, None on skip or failure.
@@ -118,7 +122,7 @@ class PrecisionRecoverer:
             return None
 
         dataset_path = base_build_config.get('quantization', {}).get('dataset')
-        if not adapter.hybrid_step1(dataset_path):
+        if not adapter.hybrid_step1(dataset_path, output_dir=tmp_dir):
             logger.error("Hybrid Step 1/2 failed.")
             adapter.release()
             return None
