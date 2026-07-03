@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1](https://github.com/potterwhite/ArcFoundry/compare/v0.15.0...v0.15.1) (2026-07-03)
+
+
+### 🐛 Fixed
+
+* **license:** correct copyright owner to PotterWhite ([#35](https://github.com/potterwhite/ArcFoundry/issues/35)) ([d82a9cf](https://github.com/potterwhite/ArcFoundry/commit/d82a9cf61c2879d6d68410cd6a006116e46d901a))
+
 ## [0.15.0](https://github.com/potterwhite/ArcFoundry/compare/v0.14.0...v0.15.0) (2026-07-03)
 
 
