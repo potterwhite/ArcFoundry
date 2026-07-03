@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0](https://github.com/potterwhite/ArcFoundry/compare/v0.14.0...v0.15.0) (2026-06-03)
+
+
+### ✨ Added
+
+* **config:** unified RVM optimization settings across all configurations ([2eb32b8](https://github.com/potterwhite/ArcFoundry/commit/2eb32b8))
+  - optimization_level: 2 → 3 (aggressive graph fusion)
+  - pruning: false → true (enable graph pruning)
+  - Added graph_surgery for refiner models (remove DeepGuidedFilterRefiner)
+  - Standardized naming: removed oplv3/no-resize suffixes
+  - Added dsr suffix to all configs for clarity
+
+* **config:** added 19 standardized RVM configuration files ([2eb32b8](https://github.com/potterwhite/ArcFoundry/commit/2eb32b8))
+  - FP16 with refiner: 15 configurations
+  - INT8 with refiner: 3 configurations
+  - no_refiner: 1 configuration
+  - All files include professional changelog comments
+
+### ⚠ BREAKING CHANGES
+
+* **config:** RVM configuration filenames changed
+  - Removed `oplv3` and `no-resize` suffixes
+  - Added `dsr` suffix to all configurations
+  - Added `0.25-dsr` suffix to configurations without explicit dsr
+
+### 📦 Archive
+
+* **config:** original configuration files archived in `configs/rvm/archived/` for rollback ([2eb32b8](https://github.com/potterwhite/ArcFoundry/commit/2eb32b8))
+
+### Performance Notes
+
+With graph_surgery enabled, NPU outputs A(4ch, low-res) + b(4ch, low-res) instead of fgr+pha.
+C++ Postprocess performs guided filter combination.
+Expected NPU saving: ~34ms (-28%).
+
+---
+
 ## [0.14.0](https://github.com/potterwhite/ArcFoundry/compare/v0.13.0...v0.14.0) (2026-04-08)
 
 

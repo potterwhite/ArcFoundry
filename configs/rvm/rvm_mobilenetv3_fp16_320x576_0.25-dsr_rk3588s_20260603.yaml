@@ -1,0 +1,74 @@
+# Copyright (c) 2026 PotterWhite — MIT License
+#
+# Configuration: rk3588s_rvm_mobilenetv3_fp16_320x576_0.25-dsr
+# Resolution: 320x576
+# Downsample Ratio: 0.25
+# Precision: fp16
+# Has Refiner: True
+#
+# Changelog:
+#   2026-06-03: Unified optimization settings (s5_8_22_15)
+#     - optimization_level: 2 → 3 (aggressive graph fusion)
+#     - pruning: false → true (enable graph pruning)
+#     - Added graph_surgery: outputs.modify (remove DeepGuidedFilterRefiner)
+#     - Standardized naming: removed oplv3/no-resize suffixes
+#     - Added dsr suffix to all configs for clarity
+#
+# Notes:
+#   - graph_surgery removes Resize×2 + element-wise tail from refiner
+#   - NPU outputs A(4ch, low-res) + b(4ch, low-res) instead of fgr+pha
+#   - C++ Postprocess performs guided filter combination
+#   - Expected NPU saving: ~34ms (-28%)
+
+project:
+  name: "rvm_mobilenetv3_fp16_320x576_0.25-dsr_rk3588s_20260603"
+  output_dir: "./output/rvm_mobilenetv3_fp16_320x576_0.25-dsr_rk3588s_20260603_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+
+build:
+  optimization_level: 3
+  verbose: true
+  pruning: true
+  eval_memory: false
+  quantization:
+    enabled: false
+    dtype: "asymmetric_quantized-8"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5
+
+models:
+  - name: "rvm_mobilenetv3_fp16_320x576_0.25-dsr_rk3588s_20260603_rk3588"
+    path: "models/downloads/rvm_mobilenetv3.onnx"
+    url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      fold_constant_inputs:
+        enabled: true
+        inputs:
+          downsample_ratio: [0.25]
+      graph_surgery:
+        enabled: true
+        outputs:
+          modify:
+            - existing: "fgr"        # ONNX graph output tensor name
+              replacement: "777"     # Conv_316 output (refiner A, 4ch, low-res)
+            - existing: "pha"        # ONNX graph output tensor name
+              replacement: "779"     # Sub_318 output (refiner b, 4ch, low-res)
+      fix_int64_type: false
+      simplify: true
+      extract_metadata: true
+    normalization:
+      mean_values: [[0, 0, 0]]
+      std_values: [[255, 255, 255]]
+    input_shapes:
+      src: [1, 3, 320, 576]
+      # dH = round(320*0.25) = 80, dW = round(576*0.25) = 144
+      r1i: [1, 16, 40, 72]   # ceil(80/2)=40,   ceil(144/2)=72
+      r2i: [1, 20, 20, 36]   # ceil(80/4)=20,   ceil(144/4)=36
+      r3i: [1, 40, 10, 18]   # ceil(80/8)=10,   ceil(144/8)=18
+      r4i: [1, 64, 5, 9]     # ceil(80/16)=5,   ceil(144/16)=9

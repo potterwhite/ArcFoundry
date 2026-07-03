@@ -19,12 +19,12 @@
 # SOFTWARE.
 
 project:
-  name: "sherpa-zipformer-rk3588"
-  output_dir: "./output/rk3588_release"
+  name: "sherpa-zipformer-rv1126b"
+  output_dir: "./output/rv1126b_release"
   workspace_dir: "./workspace/tmp"
 
 target:
-  platform: "rk3588"
+  platform: "rv1126b"
   # device_id: null
 
 build:
@@ -33,9 +33,9 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
+  optimization_level: 3  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
   verbose: true
-  pruning: false
+  pruning: true
   eval_memory: false
 
   quantization:
@@ -54,6 +54,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer encoder has no scalar control inputs to fold
+        inputs: {}
       fix_int64_type: false
       simplify: false
     input_shapes:
@@ -68,6 +71,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer decoder has no scalar control inputs to fold
+        inputs: {}
       # [IMPORTANT]: the  "y" tensor of decoder must be int64
       fix_int64_type: true
       simplify: false
@@ -82,6 +88,9 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer joiner has no scalar control inputs to fold
+        inputs: {}
       fix_int64_type: false
       simplify: false
     input_shapes:

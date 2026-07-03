@@ -1,0 +1,105 @@
+# Copyright (c) 2026 PotterWhite
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# MR2-P5 RKNN 1080x1920 FP16 config — diagnostic experiment for resolution root-cause analysis
+# Purpose: determine whether frame-62 alpha collapse is due to low input resolution (288x512)
+#          or RKNN conversion quality. See log-MR2-P5-rknn-inference.md §14.
+# Source model: rvm_mobilenetv3_fp32.onnx (opset 12, 14.3MB, 0 InstanceNorm, no refiner)
+#
+# 6 graph inputs (before ArcFoundry fold):
+#   src [1,3,1080,1920], r1i [1,16,135,240], r2i [1,20,68,120],
+#   r3i [1,40,34,60], r4i [1,64,17,30], downsample_ratio [1]
+# After fold_constant_inputs: 5 inputs (downsample_ratio promoted to constant)
+#
+# Shape derivation (dsr=0.25, dH=round(1080*0.25)=270, dW=round(1920*0.25)=480):
+#   r1i: stride-2  → ceil(270/2)=135,  ceil(480/2)=240
+#   r2i: stride-4  → ceil(270/4)=68,   ceil(480/4)=120
+#   r3i: stride-8  → ceil(270/8)=34,   ceil(480/8)=60
+#   r4i: stride-16 → ceil(270/16)=17,  ceil(480/16)=30  ← ceil matters
+
+project:
+  name: "rvm_mobilenetv3_fp16_1080x1920_rk3588"
+  output_dir: "./output/rvm_mobilenetv3_fp16_1080x1920_rk3588_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+  # device_id: null
+
+build:
+  # Optimization Level (0-3): Controls the aggressiveness of graph fusion.
+  # 0: Off / Debug. No optimization.
+  # 1: Safe. Basic and safe fusions only.
+  # 2: Balanced. Standard for most CV models. ← Used here.
+  # 3: Aggressive. Max performance. Avoid for Transformer/Conformer models.
+  optimization_level: 2
+  verbose: true
+  pruning: false
+  eval_memory: false
+
+  quantization:
+    enabled: false          # FP16 — do NOT enable INT8 until board quality is confirmed
+    dtype: "asymmetric_quantized-8"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5
+
+models:
+  - name: "rvm_mobilenetv3_fp16_1080x1920_rk3588"
+    path: "models/downloads/rvm_mobilenetv3.onnx"
+    url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
+    # Model properties:
+    #   - opset 12, IR version 6, 353 nodes, 14.3MB FP32
+    #   - Zero InstanceNorm nodes → no quantization barriers
+    #   - No refiner ops (DeepGuidedFilterRefiner / FastGuidedFilterRefiner not included)
+    #   - All Conv-BN in encoder, decoder, and ConvGRU gates
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      fold_constant_inputs:
+        enabled: true
+        inputs:
+          # downsample_ratio controls RVM's internal resize scale.
+          # Fixed at 0.25: 1080x1920 src → 270x480 processing resolution.
+          # After folding: graph has 5 inputs (src + r1i~r4i). downsample_ratio disappears.
+          downsample_ratio: [0.25]
+      fix_int64_type: false
+      simplify: true        # Folds Shape→Slice→Concat chains; equivalent to onnxsim
+      extract_metadata: true
+    normalization:
+      # RVM expects input in [0, 1] range.
+      # RKNN runtime applies: pixel / 255.0 → [0, 1]
+      # C++ frontend must NOT manually normalize for RKNN path (raw float32 or uint8 input).
+      # ONNX path: manual / 255.0 in Python preprocessing.
+      mean_values: [[0, 0, 0]]
+      std_values: [[255, 255, 255]]
+    input_shapes:
+      # --- Primary input ---
+      src: [1, 3, 1080, 1920]
+      # --- ConvGRU recurrent states ---
+      # dH = round(1080 * 0.25) = 270,  dW = round(1920 * 0.25) = 480
+      # r1: stride-2  → ceil(270/2)=135,  ceil(480/2)=240
+      # r2: stride-4  → ceil(270/4)=68,   ceil(480/4)=120
+      # r3: stride-8  → ceil(270/8)=34,   ceil(480/8)=60
+      # r4: stride-16 → ceil(270/16)=17,  ceil(480/16)=30  ← ceil matters here
+      r1i: [1, 16, 135, 240]
+      r2i: [1, 20,  68, 120]
+      r3i: [1, 40,  34,  60]
+      r4i: [1, 64,  17,  30]

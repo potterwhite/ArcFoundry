@@ -1,0 +1,99 @@
+# Copyright (c) 2026 PotterWhite — MIT License
+#
+# Configuration: rk3588s_rvm_mobilenetv3_fp16_1080x1920_0.5-dsr
+# Resolution: 1080x1920
+# Downsample Ratio: 0.5
+# Precision: fp16
+# Has Refiner: True
+#
+# Changelog:
+#   2026-06-03: Unified optimization settings (s5_8_22_15)
+#     - optimization_level: 2 → 3 (aggressive graph fusion)
+#     - pruning: false → true (enable graph pruning)
+#     - Added graph_surgery: outputs.modify (remove DeepGuidedFilterRefiner)
+#     - Standardized naming: removed oplv3/no-resize suffixes
+#     - Added dsr suffix to all configs for clarity
+#
+# Notes:
+#   - graph_surgery removes Resize×2 + element-wise tail from refiner
+#   - NPU outputs A(4ch, low-res) + b(4ch, low-res) instead of fgr+pha
+#   - C++ Postprocess performs guided filter combination
+#   - Expected NPU saving: ~34ms (-28%)
+
+project:
+  name: "rvm_mobilenetv3_fp16_1080x1920_0.5-dsr_rk3588s_20260603"
+  output_dir: "./output/rvm_mobilenetv3_fp16_1080x1920_0.5-dsr_rk3588s_20260603_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rk3588"
+  # device_id: null
+
+build:
+  # Optimization Level (0-3): Controls the aggressiveness of graph fusion.
+  # 0: Off / Debug. No optimization.
+  # 1: Safe. Basic and safe fusions only.
+  # 2: Balanced. Standard for most CV models. ← Used here.
+  # 3: Aggressive. Max performance. Avoid for Transformer/Conformer models.
+  optimization_level: 3
+  verbose: true
+  pruning: true
+  eval_memory: false
+
+  quantization:
+    enabled: false          # FP16 — do NOT enable INT8 until board quality is confirmed
+    dtype: "asymmetric_quantized-8"
+    dataset: "./data/calibration_list.txt"
+    sampling_interval: 5
+
+models:
+  - name: "rvm_mobilenetv3_fp16_1080x1920_0.5-dsr_rk3588s_20260603_rk3588"
+    path: "models/downloads/rvm_mobilenetv3.onnx"
+    url: "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
+    # Model properties:
+    #   - opset 12, IR version 6, 353 nodes, 14.3MB FP32
+    #   - Zero InstanceNorm nodes → no quantization barriers
+    #   - No refiner ops (DeepGuidedFilterRefiner / FastGuidedFilterRefiner not included)
+    #   - All Conv-BN in encoder, decoder, and ConvGRU gates
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      fold_constant_inputs:
+        enabled: true
+        inputs:
+          # downsample_ratio controls RVM's internal resize scale.
+          # Fixed at 0.5: 1080x1920 src → 540x960 processing resolution.
+          # After folding: graph has 5 inputs (src + r1i~r4i). downsample_ratio disappears.
+          downsample_ratio: [0.5]
+      graph_surgery:
+        enabled: true
+        outputs:
+          modify:
+            - existing: "fgr"        # ONNX graph output tensor name
+              replacement: "777"     # Conv_316 output (refiner A, 4ch, low-res)
+            - existing: "pha"        # ONNX graph output tensor name
+              replacement: "779"     # Sub_318 output (refiner b, 4ch, low-res)
+      fix_int64_type: false
+      simplify: true        # Folds Shape→Slice→Concat chains; equivalent to onnxsim
+      extract_metadata: true
+    normalization:
+      # RVM expects input in [0, 1] range.
+      # RKNN runtime applies: pixel / 255.0 → [0, 1]
+      # C++ frontend must NOT manually normalize for RKNN path (raw float32 or uint8 input).
+      # ONNX path: manual / 255.0 in Python preprocessing.
+      mean_values: [[0, 0, 0]]
+      std_values: [[255, 255, 255]]
+    input_shapes:
+      # --- Primary input ---
+      src: [1, 3, 1080, 1920]
+      # --- ConvGRU recurrent states ---
+      # dH = round(1080 * 0.5) = 540,  dW = round(1920 * 0.5) = 960
+      # r1: stride-2  → ceil(540/2)=270,  ceil(960/2)=480
+      # r2: stride-4  → ceil(540/4)=135,   ceil(960/4)=240
+      # r3: stride-8  → ceil(540/8)=68,   ceil(960/8)=120
+      # r4: stride-16 → ceil(540/16)=34,  ceil(960/16)=60  ← ceil matters here
+      r1i: [1, 16, 270, 480]
+      r2i: [1, 20,  135, 240]
+      r3i: [1, 40,  68,  120]
+      r4i: [1, 64,  34,  60]

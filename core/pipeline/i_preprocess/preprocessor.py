@@ -25,6 +25,8 @@ import os
 #from core.quantization import strategies
 from utils import logger
 from .dynamic_shape_fixer import DynamicShapeFixer
+from .constant_input_folder import ConstantInputFolder
+from .graph_surgeon import GraphSurgeon
 
 
 class Preprocessor:
@@ -93,6 +95,43 @@ class Preprocessor:
             logger.error(f"Failed to extract metadata: {e}")
             return None
 
+    # Required keys for every model's preprocess block.
+    # When a new strategy is added, append its key here — ArcFoundry will
+    # refuse to start if any config file omits it, preventing silent drift.
+    _REQUIRED_STRATEGY_KEYS = [
+        "fix_dynamic_shape",
+        "fold_constant_inputs",
+        "fix_int64_type",
+        "simplify",
+        "extract_metadata",
+    ]
+
+    def _validate_strategy_schema(self, model_name, json_strategies):
+        """
+        Schema Enforcement: Every key in _REQUIRED_STRATEGY_KEYS must be
+        explicitly present in the model's preprocess block.
+
+        Rationale: silent defaults hide config drift when strategies are added.
+        An explicit opt-out (enabled: false) is always required.
+
+        Raises:
+            KeyError: lists all missing keys and the offending model name.
+        """
+        missing = [k for k in self._REQUIRED_STRATEGY_KEYS if k not in json_strategies]
+        if missing:
+            raise KeyError(
+                f"\n[CONFIG ERROR] Model '{model_name}' preprocess block is missing "
+                f"required key(s):\n"
+                + "".join(f"  - {k}\n" for k in missing)
+                + "Add them explicitly (even if disabled). Example:\n"
+                + "".join(
+                    f"  {k}:\n    enabled: false\n"
+                    if isinstance(json_strategies.get(k, {}), dict) else
+                    f"  {k}: false\n"
+                    for k in missing
+                )
+            )
+
     def preprocess(self, model_name, model_path, model_shapes, output_path,
                    json_strategies):
         """
@@ -103,12 +142,14 @@ class Preprocessor:
         custom_string = None
         is_model_modified = False
 
+        # Validation -- 0. Schema Enforcement (fail-fast on missing strategy keys)
+        self._validate_strategy_schema(model_name, json_strategies)
         # Processing -- 1. Extract Metadata (Sherpa specific - Must run on original ONNX)
         if json_strategies.get('extract_metadata', False):
-            logger.info("Strategy (1/4): Extracting Custom Metadata...")
+            logger.info("Strategy (1/6): Extracting Custom Metadata...")
             custom_string = self._extract_metadata(current_model_path)
         else:
-            logger.info("Strategy (1/4): Metadata Extraction Disabled.")
+            logger.info("Strategy (1/6): Metadata Extraction Disabled.")
 
         # Preparation -- 2. Existing Check
         if os.path.exists(output_path):
@@ -147,7 +188,7 @@ class Preprocessor:
 
         # Processing -- 2.2. Strategy 2: Fix Dynamic Shape (Delegate to DynamicShapeFixer)
         if dyn_shape_cfg.get('enabled', False):
-            logger.info("Strategy (2/4): Fixing Dynamic Shapes...")
+            logger.info("Strategy (2/6): Fixing Dynamic Shapes...")
             strict_override = dyn_shape_cfg.get('strict_override', False)
 
             shape_fixer = DynamicShapeFixer(model, model_shapes,
@@ -155,7 +196,7 @@ class Preprocessor:
             if shape_fixer.process():
                 is_model_modified = True
         else:
-            logger.info("Strategy (2/4): Dynamic Shape Fixing Disabled.")
+            logger.info("Strategy (2/6): Dynamic Shape Fixing Disabled.")
         # -------------------------
         # if json_strategies.get('fix_dynamic_shape', False):
         #     logger.info("Strategy (2/4): Fixing Dynamic Shapes...")
@@ -165,27 +206,51 @@ class Preprocessor:
         #     logger.info("Strategy (2/4): Dynamic Shape Fixing Disabled.")
         # -------------------------
 
-        # Processing -- 3. Fix INT64 Type (Decoder specific)
+        # Processing -- 3. Fold Constant Inputs (e.g. RVM downsample_ratio)
+        fold_cfg = json_strategies.get('fold_constant_inputs', {})
+        if fold_cfg.get('enabled', False):
+            logger.info("Strategy (3/6): Folding Constant Inputs...")
+            folder = ConstantInputFolder(model, fold_cfg.get('inputs', {}))
+            if folder.process():
+                is_model_modified = True
+        else:
+            logger.info("Strategy (3/6): Constant Input Folding Disabled.")
+
+        # Processing -- 4. Graph Surgery (optional, model-specific)
+        # Modular graph modification powered by onnx-graphsurgeon.
+        # Sub-operations organized by OGS targets: outputs, inputs, nodes, tensors.
+        # Currently implemented: outputs.modify (replace tensors in graph.outputs).
+        surgery_cfg = json_strategies.get('graph_surgery', None)
+        if surgery_cfg and surgery_cfg.get('enabled', False):
+            logger.info("Strategy (4/6): Running Graph Surgery...")
+            surgeon = GraphSurgeon(model, surgery_cfg)
+            if surgeon.process():
+                model = surgeon.get_model()
+                is_model_modified = True
+        else:
+            logger.info("Strategy (4/6): Graph Surgery -- skipped (not configured).")
+
+        # Processing -- 5. Fix INT64 Type (Decoder specific)
         if json_strategies.get('fix_int64_type', False):
-            logger.info("Strategy (3/4): Fixing INT64 Types for inputs...")
+            logger.info("Strategy (5/6): Fixing INT64 Types for inputs...")
             if self._fix_int64_type(model):
                 is_model_modified = True
         else:
-            logger.info("Strategy (3/4): INT64 Type Fixing Disabled.")
+            logger.info("Strategy (5/6): INT64 Type Fixing Disabled.")
 
-        # Processing -- 4. Save intermediate if is_model_modified
+        # Processing -- 5.5. Save intermediate if is_model_modified
         if is_model_modified:
             logger.debug(f"Saving intermediate fixed model to {output_path}")
             onnx.save(model, output_path)
             current_model_path = output_path
 
-        # Processing -- 5. Simplify (onnxsim)
+        # Processing -- 6. Simplify (onnxsim)
         if json_strategies.get('simplify', False):
-            logger.info("Strategy (4/4): Running ONNX Simplifier...")
+            logger.info("Strategy (6/6): Running ONNX Simplifier...")
             current_model_path = self._simplify(current_model_path,
                                                 output_path)
         else:
-            logger.info("Strategy (4/4): ONNX Simplification Disabled.")
+            logger.info("Strategy (6/6): ONNX Simplification Disabled.")
 
         # Finalization
         return current_model_path, custom_string

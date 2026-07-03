@@ -221,15 +221,29 @@ class RKNNAdapter:
         if hasattr(self, 'rknn') and self.rknn:
             self.rknn.release()
 
-    def hybrid_step1(self, dataset, proposal=False):
+    def hybrid_step1(self, dataset, output_dir=None, proposal=False):
         """
         Wrapper for hybrid_quantization_step1.
         Generates .model, .data, and .quantization.cfg files.
+
+        Args:
+            dataset: Path to calibration dataset list.
+            output_dir: Directory to write intermediate files. If None, uses CWD.
+                        The RKNN SDK writes to CWD, so we chdir temporarily.
+            proposal: If True, generate proposal mode files.
         """
+        import os
         logger.info("--> [Hybrid] Step (1/2): Generating intermediate files...")
-        # rknn_batch_size=1 is required for this step usually
-        ret = self.rknn.hybrid_quantization_step1(dataset=dataset, rknn_batch_size=1, proposal=proposal)
-        return ret == 0
+        # RKNN SDK writes hybrid_step1 output to CWD, so chdir if output_dir is given
+        orig_dir = os.getcwd()
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            os.chdir(output_dir)
+        try:
+            ret = self.rknn.hybrid_quantization_step1(dataset=dataset, rknn_batch_size=1, proposal=proposal)
+            return ret == 0
+        finally:
+            os.chdir(orig_dir)
 
     def hybrid_step2(self, model_inp, data_inp, cfg_inp):
         """

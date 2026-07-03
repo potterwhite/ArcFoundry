@@ -19,7 +19,7 @@
 # SOFTWARE.
 
 project:
-  name: "modnet-rk3588"
+  name: "sherpa-zipformer-rk3588"
   output_dir: "./output/rk3588_release"
   workspace_dir: "./workspace/tmp"
 
@@ -33,7 +33,7 @@ build:
   # 1: Safe. Enables only basic and safe fusions. Good starting point if the default level causes accuracy issues.
   # 2: Balanced. Standard optimizations suitable for most CV models.
   # 3: Aggressive (Default). Max performance. Complex operator fusion. May cause accuracy drop in Transformer/Conformer models due to aggressive merging.
-  optimization_level: 2
+  optimization_level: 2  # Suggest changing to 1 or 2 to fix the Div/Internal node issues
   verbose: true
   pruning: false
   eval_memory: false
@@ -41,48 +41,58 @@ build:
   quantization:
     enabled: false
     dtype: "asymmetric_quantized-8"
+    #dataset: "./data/calibration_list-fake.txt"
     dataset: "./data/calibration_list.txt"
     sampling_interval: 5           # Use every 5th sample from the dataset for calibration
 
 models:
-  - name: "modnet"
-    path: "models/downloads/modnet_photographic_portrait_matting.onnx"
-    # -------
-    # Original ONNX from MODNet Author
-    # url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/photographic/modnet_photographic_portrait_matting.onnx"
-    # -------
-    # InstanceNormalization Folded ONNX model
-    url: "https://huggingface.co/PotterWhite/MODNet/resolve/main/photographic/modnet_photographic_portrait_matting_in_folded.onnx"
+  - name: "encoder"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/encoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/encoder-epoch-99-avg-1.onnx"
     preprocess:
+      extract_metadata: true
       fix_dynamic_shape:
         enabled: true
-        strict_override: true
-      simplify: true
-      extract_metadata: true
-    normalization:
-      mean_values: [[127.5, 127.5, 127.5]]
-      std_values: [[127.5, 127.5, 127.5]]
+        strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer encoder has no scalar control inputs to fold
+        inputs: {}
+      fix_int64_type: false
+      simplify: false
     input_shapes:
-      # -----------------
-      # Test: 256*256=65536 < 88064
-      # Mar11.2026: <60ms 3NPU |
-      # input: [1, 3, 256, 256]
-      # -----------------
-      # input: [1, 3, 384, 384]
-      # -----------------
-      # Mar11.2026: <
-      # input: [1, 3, 288, 512]
-      # -----------------
-      # input: [1, 3, 384, 672]    # 270ms 2STARTS-CLEAR-STRANDS
-      # -----------------
-      #input: [1, 3, 448, 800]  # <540ms 2STARTS-CLEAR-STRANDS 7CPU-TRANSPOSES
-      # ---------------
-      # Mar05.2026: <936ms 68/178/188/198/208/219/231-7CPU-TRANSPOSES
-      # Mar11.2026: <571ms SingleNPU / Serialize Inferencing
-      input: [1, 3, 576, 1024]
-      # -----------------
-      #input: [1, 3, 864, 1536]  # 2334ms 68/79/86/97/134/146/156/166/178/188/198/208/219/231-14CPU-TRANSPOSES
-      # -----------------
-      #input: [1, 3, 512, 512]  # Fixed 512x512 size for optimal NPU multi-core scheduling.
-                          # Non-standard sizes like 512x896 cause multi-core scheduling failures,
-                          # forcing layers to run on single core instead of 3-core parallel mode.
+      # [batch=1, frames=71, features=80] comes from the inspection of the rknn from sherpa-onnx official
+      x: [1, 71, 80]
+
+  - name: "decoder"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/decoder-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/decoder-epoch-99-avg-1.onnx"
+    preprocess:
+      extract_metadata: true
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer decoder has no scalar control inputs to fold
+        inputs: {}
+      # [IMPORTANT]: the  "y" tensor of decoder must be int64
+      fix_int64_type: true
+      simplify: false
+    input_shapes:
+      y: [1, 512]
+
+  - name: "joiner"
+    path: "models/downloads/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/joiner-epoch-99-avg-1.onnx"
+    url: "https://huggingface.co/PotterWhite/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/joiner-epoch-99-avg-1.onnx"
+    preprocess:
+      extract_metadata: true
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: false
+      fold_constant_inputs:
+        enabled: false   # Zipformer joiner has no scalar control inputs to fold
+        inputs: {}
+      fix_int64_type: false
+      simplify: false
+    input_shapes:
+      encoder_out: [1, 512]
+      decoder_out: [1, 512]

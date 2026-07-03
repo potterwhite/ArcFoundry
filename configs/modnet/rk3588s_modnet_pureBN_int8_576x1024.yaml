@@ -24,8 +24,8 @@
 # DO NOT modify rk3588s_modnet.yaml — this file is isolated for pureBN conversion.
 
 project:
-  name: "modnet-pureBN-rk3588"
-  output_dir: "./output/pureBN_rk3588_release"
+  name: "rk3588s_modnet_pureBN_int8_576x1024"
+  output_dir: "./output/pureBN_rk3588_int8_release"
   workspace_dir: "./workspace/tmp"
 
 target:
@@ -44,9 +44,9 @@ build:
   eval_memory: false
 
   quantization:
-    enabled: false          # FP16 first — do NOT enable INT8 until board quality is confirmed
+    enabled: true           # Enable INT8 quantization
     dtype: "asymmetric_quantized-8"
-    dataset: "./data/calibration_list.txt"
+    dataset: "./data/calibration_int8_200items.txt"
     sampling_interval: 5
 
 models:
@@ -58,6 +58,10 @@ models:
       fix_dynamic_shape:
         enabled: true
         strict_override: true
+      fold_constant_inputs:
+        enabled: false   # MODNet has no scalar control inputs to fold
+        inputs: {}
+      fix_int64_type: false
       simplify: false
       extract_metadata: true
     normalization:
@@ -71,8 +75,8 @@ models:
       # Starting point: 512x512 matches training resolution for quality comparison
       # with Python/C++ ONNX native inference.
       # Next step after board validation: test [1, 3, 576, 1024] for speed vs quality.
-      # input: [1, 3, 576, 1024]
+      input: [1, 3, 576, 1024]
       # input: [1, 3, 256, 256]
       # input: [1, 3, 384, 384]
-      input: [1, 3, 288, 512]
+      # input: [1, 3, 288, 512]
 

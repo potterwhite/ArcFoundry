@@ -79,8 +79,13 @@ class CalibrationGenerator:
         model_name = models[0].get('name', '').lower()
 
         # CV model keywords
+        # NOTE: 'rvm' was added because RVM (Robust Video Matting) is a
+        # computer vision model that should use the 'vision' calibration
+        # strategy.  Without it, the model name "rvm_mobilenetv3_256x256_int8"
+        # would match 'mobilenet' anyway, but adding 'rvm' explicitly makes
+        # the intent clear and future-proof in case the naming changes.
         cv_keywords = [
-            'modnet', 'yolo', 'resnet', 'mobilenet', 'efficientnet',
+            'modnet', 'rvm', 'yolo', 'resnet', 'mobilenet', 'efficientnet',
             'segmentation', 'detection', 'classification', 'matting'
         ]
 
