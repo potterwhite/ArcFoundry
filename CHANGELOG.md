@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0](https://github.com/potterwhite/ArcFoundry/compare/v0.14.0...v0.15.0) (2026-07-03)
+
+
+### ✨ Added
+
+* add two rvm configs ([aeae4b0](https://github.com/potterwhite/ArcFoundry/commit/aeae4b038fdb1b2e6e389ad85b7e53d8db241750))
+* **configs:** organize configs into model subdirectories + two-level menu ([cc4d53f](https://github.com/potterwhite/ArcFoundry/commit/cc4d53f9f6275d4e69eb3721953dd9a4fe4161c0))
+* optimization-level=3 config created ([2256203](https://github.com/potterwhite/ArcFoundry/commit/22562036b9e204fd246d2883c5403334c100cd82))
+* **preprocess:** add fold_constant_inputs strategy + schema enforcement for RVM support ([2e4ad89](https://github.com/potterwhite/ArcFoundry/commit/2e4ad89144962fbb174f4a7d45bb8e65fd86d7f4))
+* **preprocess:** integrate graph_surgery module for RVM refiner removal ([ddca032](https://github.com/potterwhite/ArcFoundry/commit/ddca03242898265fa5881e7127aee5425925e6bf))
+* **rvm:** add ArcFoundry FP16 config for RVM MobileNetV3 @ 256x256 ([336b52d](https://github.com/potterwhite/ArcFoundry/commit/336b52d8ecff962ceb4e8d855a5e503866a68ed1))
+* **rvm:** add dsr=0.5 config for 1080p quality experiment (s21) ([ffff795](https://github.com/potterwhite/ArcFoundry/commit/ffff795d5730134f43d8ea5aa27ebf05bf46fde4))
+* **rvm:** add FP16 RKNN conversion config for RVM MobileNetV3 ([ebb7a6e](https://github.com/potterwhite/ArcFoundry/commit/ebb7a6ef4cb1acc63305d256268d72a9ea97253d))
+* **rvm:** add INT8 RKNN conversion configs for RVM MobileNetV3 ([3317116](https://github.com/potterwhite/ArcFoundry/commit/3317116f3497c4ed119a2df61bc47ea390da5481))
+* **rvm:** add RVM MobileNetV3 conversion configs and graph surgery pipeline ([a55eddc](https://github.com/potterwhite/ArcFoundry/commit/a55eddc45c413e27f9b67e1fe84c7b2fb2019049))
+* **s5_8_22_12:** add RVM refiner Resize removal scripts and config ([59a3e53](https://github.com/potterwhite/ArcFoundry/commit/59a3e53df2d8294941afc53074fd3deb660594ce))
+
+
+### 🐛 Fixed
+
+* **calibration:** support multi-input models in vision strategy ([67e7032](https://github.com/potterwhite/ArcFoundry/commit/67e7032b962a9f3c2a54f169803d192e689c21e9))
+* **config:** add HuggingFace URL for no_refiner model (s5_8_22_17) ([9872973](https://github.com/potterwhite/ArcFoundry/commit/98729739f49e428c9db6f31340b1fb567d8b8def))
+* **config:** correct INT8 calibration dataset path and headers (s5_8_22_18) ([e85e07e](https://github.com/potterwhite/ArcFoundry/commit/e85e07ec64dcecd4eb7658117c53e97a2e91928c))
+* **graph_surgeon:** set dtype on replacement tensors after cleanup ([5508af7](https://github.com/potterwhite/ArcFoundry/commit/5508af7794c47d724c0c9d451d42b469634dd56c))
+* **hybrid:** avoid double-nested tmp/ in workspace path ([c544e87](https://github.com/potterwhite/ArcFoundry/commit/c544e87859a2e877a5742cbd95019ca3feaf0f02))
+* **hybrid:** write intermediate files to workspace/tmp/ instead of CWD ([88e6dfc](https://github.com/potterwhite/ArcFoundry/commit/88e6dfce515b7e00b5a53c5d8e63b69cfabf923f))
+
 ## [0.15.0](https://github.com/potterwhite/ArcFoundry/compare/v0.14.0...v0.15.0) (2026-06-03)
 
 
