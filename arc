@@ -424,19 +424,72 @@ func_1_11_elapsed_time_calculation() {
 func_2_1_setup_venv() {
 
     # 1. Check/Create Venv
-    # if [ ! -f "${VENV_DIR}/bin/python" ]; then
-    if [ ! -f "${PYTHON_BIN}" ]; then
-        func_1_1_log "Initializing virtual environment..."
-        # if ! command -v python3.8 &> /dev/null; then
-        #     func_1_2_err "Python 3.8 not installed. Run: sudo apt install python3.8 python3.8-venv"
-        # fi
-        if ! ${HOST_PYTHON_BIN} -m venv "${VENV_DIR}"; then
-            func_1_2_err "Please install the venv package as the hint above and Re-execute me again."
-            return 1
-        fi
-        "${PIP_BIN}" install --upgrade pip
+    #
+    # Two failure modes this guards against:
+    #
+    # (a) Half-broken venv: `python -m venv` was invoked once when
+    #     python3.X-venv wasn't installed, leaving .venv/bin/python
+    #     symlinks behind but no pip. Original code only checked for
+    #     python, so it would silently keep this corpse and crash later
+    #     at the RKNN wheel install with a misleading "pip: No such file".
+    #
+    # (b) Silent ensurepip failure: even after a successful venv create,
+    #     pip can be missing if ensurepip itself failed. Original code
+    #     ran `pip install --upgrade pip` without checking it worked,
+    #     then crashed much later with the same misleading error.
+    #
+    # We now do THREE checks:
+    #   1. On entry:  is the existing .venv healthy? (python AND pip AND importable pip module)
+    #   2. On create: did `python -m venv` succeed AND did ensurepip produce a working pip?
+    #   3. On upgrade: did `pip install --upgrade pip` succeed?
+    # Each failed check exits with a message that tells the user exactly
+    # what system package they need to install.
+
+    # Step 1: existing venv health check
+    if [ -f "${PYTHON_BIN}" ] && [ -x "${PIP_BIN}" ] && "${PYTHON_BIN}" -m pip --version &> /dev/null; then
+        func_1_1_log "Virtual environment already exists and is healthy. Skipping creation."
     else
-        func_1_1_log "Virtual environment already exists. Skipping creation."
+        # If a half-broken venv exists, explain WHY we blow it away — the
+        # user shouldn't be surprised by rm -rf of their venv.
+        if [ -d "${VENV_DIR}" ] && [ -f "${PYTHON_BIN}" ]; then
+            func_1_1_log "Existing .venv is half-broken (python present, pip missing). Re-creating from scratch..."
+            rm -rf "${VENV_DIR}"
+        else
+            func_1_1_log "Initializing virtual environment..."
+        fi
+
+        # Step 2: create venv. Detect host python minor version so the
+        # error message names the exact apt package the user needs.
+        local host_py_minor
+        host_py_minor=$(${HOST_PYTHON_BIN} -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo "?")
+        local apt_pkg="python3.${host_py_minor}-venv"
+
+        if ! ${HOST_PYTHON_BIN} -m venv "${VENV_DIR}" 2>&1 | tee /tmp/arc_venv_err.log; then
+            # venv creation itself failed. Most common cause on Ubuntu:
+            # `python3.X-venv` apt package is not installed. Tell the user.
+            if grep -q "ensurepip is not available" /tmp/arc_venv_err.log 2>/dev/null; then
+                rm -rf "${VENV_DIR}"
+                func_1_2_err "Python's ensurepip module is unavailable. On Debian/Ubuntu, install the venv package for your Python version:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
+            else
+                rm -rf "${VENV_DIR}"
+                func_1_2_err "Failed to create venv at ${VENV_DIR}. See error above."
+            fi
+        fi
+        rm -f /tmp/arc_venv_err.log
+
+        # Step 2b: post-create verification. Even if `python -m venv`
+        # returned 0, pip may still be missing (Ubuntu 22.04 bug where
+        # python3.10-venv is installed but bundled pip wheel was somehow
+        # dropped during venv creation).
+        if ! "${PYTHON_BIN}" -m pip --version &> /dev/null; then
+            rm -rf "${VENV_DIR}"
+            func_1_2_err "Freshly-created .venv has no working pip. Likely cause: ${apt_pkg} is missing or broken. Run:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
+        fi
+
+        # Step 3: upgrade pip. Treat failure as fatal — silently continuing
+        # was the original arc's mistake that led to the "line 158: pip:
+        # No such file" cryptic error two minutes later.
+        "${PIP_BIN}" install --upgrade pip || func_1_2_err "Failed to upgrade pip inside the venv. Check network/proxy."
     fi
 
     # 2. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
