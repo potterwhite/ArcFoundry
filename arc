@@ -127,7 +127,11 @@ func_1_5_install_rknn() {
     func_1_1_log "RKNN Toolkit2 not found. Initiating auto-install..."
 
     # 2. Define Paths
-    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git"
+    # NOTE: we deliberately drop the ".git" suffix so example scripts under
+    # this repo (which do realpath.index('rknn-toolkit2') to extend sys.path)
+    # resolve correctly. See commit message for the trade-off vs the default
+    # `git clone` naming.
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
 
     # 3. Clone if missing (full clone + checkout pinned SHA, NOT --depth 1)
     #    Full clone is required because pinned-SHA checkout needs the SHA to
@@ -181,7 +185,7 @@ func_1_5_install_rknn() {
 #
 # Args:
 #   $1 = repo display name (e.g. "rknn-toolkit2")
-#   $2 = absolute path to the repo dir (e.g. "${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git")
+#   $2 = absolute path to the repo dir (e.g. "${SDK_ROOT}/rockchip-repos/rknn-toolkit2")
 #   $3 = pinned SHA expected for this repo
 #
 # Behavior:
@@ -257,7 +261,9 @@ func_1_5_2_verify_pinned_sha() {
 # been called for this repo. If the directory was missing, we clone; if it
 # was kept by user choice during verify, we touch nothing here.
 func_1_5_3_clone_rknn_model_zoo() {
-    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn_model_zoo.git"
+    # NOTE: no ".git" suffix — same reason as func_1_5. example scripts under
+    # this repo rely on realpath.index('rknn_model_zoo') matching literally.
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn_model_zoo"
 
     # 1. Already cloned (either by previous run, or by user's "skip" choice)?
     if [ -d "${repo_dir}" ]; then
@@ -500,11 +506,11 @@ func_2_1_setup_venv() {
     #      (c) clone rknn_model_zoo.git (verify-already-handled-or-skipped)
     func_1_5_2_verify_pinned_sha \
         "rknn-toolkit2" \
-        "${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git" \
+        "${SDK_ROOT}/rockchip-repos/rknn-toolkit2" \
         "${RKNN_TOOLKIT2_PINNED_SHA}"
     func_1_5_2_verify_pinned_sha \
         "rknn_model_zoo" \
-        "${SDK_ROOT}/rockchip-repos/rknn_model_zoo.git" \
+        "${SDK_ROOT}/rockchip-repos/rknn_model_zoo" \
         "${RKNN_MODEL_ZOO_PINNED_SHA}"
 
     func_1_5_install_rknn
