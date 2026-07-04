@@ -8,6 +8,30 @@ __START_TIME=
 __SECOND_STAGE_BUILD_START_TIME=
 
 # ==============================================================================
+# Pinned Rockchip Repo SHAs
+# ------------------------------------------------------------------------------
+# WHY pin: every team member must run the SAME upstream snapshot. Without
+# pinning, a teammate who runs `./arc init` two months from now may pull a
+# newer rknn_model_zoo whose example outputs no longer match our golden
+# numerics, or a newer rknn-toolkit2 whose wheel is incompatible with the
+# one we tested. Pinning makes roll-back and bug-bisection deterministic.
+#
+# Both pins correspond to RKNN-Toolkit2 v2.3.2 (verified on 2026-07-04):
+#   * rknn_model_zoo: HEAD == tag v2.3.2 == bad6c73...
+#   * rknn-toolkit2 : HEAD has no tag, but wheel/requirements inside the repo
+#                     are stamped "2.3.2" (commit message "Update LICENSE")
+#
+# To bump these pins: change the values here, then commit. Do NOT edit
+# silently — every change must be reflected in a commit so git bisect works.
+# ==============================================================================
+RKNN_REPO_BASE_URL="https://github.com/airockchip"
+RKNN_TOOLKIT2_REPO_URL="${RKNN_REPO_BASE_URL}/rknn-toolkit2.git"
+RKNN_TOOLKIT2_PINNED_SHA="59a913d172e7f5ff03c9076e2ec7b1b1288ffd08"
+RKNN_MODEL_ZOO_REPO_URL="${RKNN_REPO_BASE_URL}/rknn_model_zoo.git"
+RKNN_MODEL_ZOO_PINNED_SHA="bad6c7334531becaf90a561988519b7bec34d0ab"
+RKNN_MODEL_ZOO_PINNED_TAG="v2.3.2"  # for human-readable log only; clone uses SHA
+
+# ==============================================================================
 # Level 1: Helpers
 # ==============================================================================
 func_1_1_log() {
@@ -88,7 +112,7 @@ func_1_4_show_help() {
     echo "--- Maintenance Commands ---"
     echo "  clean       : Remove workspace/ and output/ directories"
     echo "  distclean   : Remove .venv/, workspace/ models/, rockchip-repos/ and output/ ALMOST EVERYTHING DANGER (Factory Reset)"
-    echo "  init        : Force environment initialization"
+    echo "  init        : Force env init (clone/pin Rockchip repos + install rknn-toolkit2 wheel; needs network)"
     echo "  help, -h    : Show this help message"
 }
 
@@ -104,14 +128,18 @@ func_1_5_install_rknn() {
 
     # 2. Define Paths
     local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git"
-    local repo_url="https://github.com/airockchip/rknn-toolkit2.git"
 
-    # 3. Clone if missing
+    # 3. Clone if missing (full clone + checkout pinned SHA, NOT --depth 1)
+    #    Full clone is required because pinned-SHA checkout needs the SHA to
+    #    be reachable from a ref; depth-1 clones only have the branch tip.
     if [ ! -d "${repo_dir}" ]; then
-        func_1_1_log "Cloning rknn-toolkit2 repository (Depth 1)..."
+        func_1_1_log "Cloning rknn-toolkit2 repository (pinned to ${RKNN_TOOLKIT2_PINNED_SHA:0:7})..."
         # Ensure parent dir exists
         mkdir -p "$(dirname "${repo_dir}")"
-        git clone --depth 1 "${repo_url}" "${repo_dir}" || func_1_2_err "Failed to clone repo."
+        git clone "${RKNN_TOOLKIT2_REPO_URL}" "${repo_dir}" \
+            || func_1_2_err "Failed to clone rknn-toolkit2 repo."
+        (cd "${repo_dir}" && git checkout "${RKNN_TOOLKIT2_PINNED_SHA}") \
+            || func_1_2_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
     fi
 
     # 4. Find the correct Wheel file for Python 3.x (cp3x) on x86_64
@@ -145,6 +173,113 @@ func_1_5_install_rknn() {
     "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_2_err "Failed to install a compatible ONNX version."
 
     func_1_1_log "RKNN Toolkit2 installed successfully."
+}
+
+# Verify (and optionally repair) the HEAD of an existing Rockchip repo clone.
+# Called by func_2_1_setup_venv BEFORE func_1_5 / func_1_5_3 so we can decide
+# what to do when the directory exists but is on the wrong commit.
+#
+# Args:
+#   $1 = repo display name (e.g. "rknn-toolkit2")
+#   $2 = absolute path to the repo dir (e.g. "${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git")
+#   $3 = pinned SHA expected for this repo
+#
+# Behavior:
+#   - Repo absent   -> return 0; the caller (func_1_5 / func_1_5_3) will clone.
+#   - Repo present, HEAD matches pinned -> log [OK], return 0.
+#   - Repo present, HEAD differs        -> prompt user:
+#         ENTER (default) -> reset hard to pinned SHA. Use this if you want
+#                            a clean roll-back to the tested snapshot.
+#         s               -> skip; keep the existing HEAD. Use this if you
+#                            intentionally upgraded and accept the risk.
+#
+# Returns:
+#   0 always (skip is allowed; reset is non-fatal). Only errors out if `git`
+#   itself is broken or the directory isn't a git repo.
+func_1_5_2_verify_pinned_sha() {
+    local display_name="$1"
+    local repo_dir="$2"
+    local pinned_sha="$3"
+
+    # Case 1: directory doesn't exist yet -> caller will clone
+    if [ ! -d "${repo_dir}" ]; then
+        return 0
+    fi
+
+    # Case 2: directory exists but isn't a git repo -> caller error
+    if [ ! -d "${repo_dir}/.git" ] && [ ! -f "${repo_dir}/.git" ]; then
+        func_1_2_err "${repo_dir} exists but is not a git repository. Remove it manually and re-run."
+    fi
+
+    local current_sha
+    current_sha=$(cd "${repo_dir}" && git rev-parse HEAD 2>/dev/null) \
+        || func_1_2_err "Failed to read HEAD in ${repo_dir}."
+
+    # Case 3: HEAD already matches pinned SHA
+    if [ "${current_sha}" = "${pinned_sha}" ]; then
+        func_1_1_log "[OK] ${display_name} @ ${current_sha:0:7} (matches pinned)"
+        return 0
+    fi
+
+    # Case 4: HEAD differs from pinned SHA -> ask the user
+    echo ""
+    echo -e "\033[1;33m[WARN]\033[0m ${display_name} HEAD differs from pinned commit:"
+    echo "        current : ${current_sha}"
+    echo "        pinned  : ${pinned_sha}"
+    echo ""
+    echo "  Press ENTER to FORCE-RESET to pinned SHA (recommended for roll-back)"
+    echo "  Type 's' + ENTER to SKIP and keep the current HEAD (you take the risk)"
+
+    local answer=""
+    # read -r blocks until user hits Enter. Ctrl-C falls through to the
+    # default (RESET) — we assume roll-back is the safer default in a
+    # CI-like / shared-machine flow.
+    read -r -p "  Your choice [Enter=reset / s=skip]: " answer
+
+    case "${answer}" in
+        s|S)
+            func_1_1_log "[SKIP] ${display_name} kept at ${current_sha:0:7} (not pinned)"
+            return 0
+            ;;
+        *)
+            func_1_1_log "[RESET] ${display_name}: ${current_sha:0:7} -> ${pinned_sha:0:7}"
+            (cd "${repo_dir}" && git reset --hard "${pinned_sha}") \
+                || func_1_2_err "Failed to reset ${repo_dir} to pinned SHA."
+            return 0
+            ;;
+    esac
+}
+
+# Clone rknn_model_zoo (examples / reference scripts only — no Python wheel).
+# Mirrors func_1_5's structure: full clone + pinned SHA checkout.
+#
+# IMPORTANT: this function ASSUMES func_1_5_2_verify_pinned_sha has already
+# been called for this repo. If the directory was missing, we clone; if it
+# was kept by user choice during verify, we touch nothing here.
+func_1_5_3_clone_rknn_model_zoo() {
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn_model_zoo.git"
+
+    # 1. Already cloned (either by previous run, or by user's "skip" choice)?
+    if [ -d "${repo_dir}" ]; then
+        local current_sha
+        current_sha=$(cd "${repo_dir}" && git rev-parse HEAD 2>/dev/null) || true
+        if [ "${current_sha}" = "${RKNN_MODEL_ZOO_PINNED_SHA}" ]; then
+            func_1_1_log "rknn_model_zoo already present and pinned. Skipping."
+        else
+            func_1_1_log "rknn_model_zoo present at ${current_sha:0:7} (not pinned, kept by user choice). Skipping clone."
+        fi
+        return 0
+    fi
+
+    # 2. Clone + checkout pinned SHA
+    func_1_1_log "Cloning rknn_model_zoo repository (pinned to ${RKNN_MODEL_ZOO_PINNED_TAG} / ${RKNN_MODEL_ZOO_PINNED_SHA:0:7})..."
+    mkdir -p "$(dirname "${repo_dir}")"
+    git clone "${RKNN_MODEL_ZOO_REPO_URL}" "${repo_dir}" \
+        || func_1_2_err "Failed to clone rknn_model_zoo repo."
+    (cd "${repo_dir}" && git checkout "${RKNN_MODEL_ZOO_PINNED_SHA}") \
+        || func_1_2_err "Failed to checkout pinned SHA ${RKNN_MODEL_ZOO_PINNED_SHA}."
+
+    func_1_1_log "rknn_model_zoo cloned successfully at ${RKNN_MODEL_ZOO_PINNED_TAG}."
 }
 
 func_1_6_setup_environment_vars() {
@@ -305,7 +440,22 @@ func_2_1_setup_venv() {
     fi
 
     # 2. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
+    #    Order matters:
+    #      (a) verify both rockchip repos against their pinned SHA,
+    #          giving user the chance to roll-back / skip BEFORE we touch them
+    #      (b) install RKNN Toolkit2 (which clones rknn-toolkit2.git if absent)
+    #      (c) clone rknn_model_zoo.git (verify-already-handled-or-skipped)
+    func_1_5_2_verify_pinned_sha \
+        "rknn-toolkit2" \
+        "${SDK_ROOT}/rockchip-repos/rknn-toolkit2.git" \
+        "${RKNN_TOOLKIT2_PINNED_SHA}"
+    func_1_5_2_verify_pinned_sha \
+        "rknn_model_zoo" \
+        "${SDK_ROOT}/rockchip-repos/rknn_model_zoo.git" \
+        "${RKNN_MODEL_ZOO_PINNED_SHA}"
+
     func_1_5_install_rknn
+    func_1_5_3_clone_rknn_model_zoo
 
     # 3. Check Dependencies (Force check for V1.1 new deps: requests)
     #    We should run after RKNN Toolkit2 is installed to avoid conflicts.
