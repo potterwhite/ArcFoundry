@@ -5,13 +5,16 @@
 # func_2_1_2_rockchip_repos_init based on CFG_RKNN_TARBALL_PATH:
 #
 #   - Set   -> func_1_5_b_install_rknn_from_tarball: rm -rf + tar -xzf
-#              local .tgz, then find wheel, pip install. No .git/ preserved.
+#              the local .tgz, then func_1_5_b_1_flatten_tarball_layout
+#              removes any versioned wrapper dir so the SDK ends up at
+#              the same path Path A produces. No .git/ preserved.
 #
 #   - Empty -> func_1_5_a_install_rknn_from_official_repo: git clone the
-#              airockchip repo at the pinned SHA, then find wheel, pip install.
+#              airockchip repo at the pinned SHA.
 #
-# Both paths share func_1_5_x_install_wheel_from_dir for wheel + requirements
-# + onnx install (the only step that's actually identical).
+# Both paths converge on the same final layout
+# (${repo_dir}/rknn-toolkit2/packages/x86_64/...) and feed into
+# func_1_5_x_install_wheel_from_dir for wheel + requirements + onnx.
 # ------------------------------------------------------------------------------
 
 # Path A: install from official airockchip repo at pinned SHA
@@ -33,6 +36,12 @@ func_1_5_a_install_rknn_from_official_repo() {
 }
 
 # Path B: install from a local tarball (CFG_RKNN_TARBALL_PATH set)
+#
+# Rockchip's tarballs sometimes wrap the SDK in a versioned top-level dir
+# (e.g. rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/) and sometimes don't.
+# To stay compatible with BOTH layouts, we extract as-is, then call
+# func_1_5_b_1_flatten_tarball_layout to flatten any wrapper to the
+# Path A (git-clone) layout:  ${repo_dir}/rknn-toolkit2/
 func_1_5_b_install_rknn_from_tarball() {
     local tarball_path="${CFG_RKNN_TARBALL_PATH}"
     local expected_sha256="${CFG_RKNN_TARBALL_SHA256:-}"
@@ -61,30 +70,59 @@ func_1_5_b_install_rknn_from_tarball() {
     fi
     func_1_1_log "RKNN Toolkit2 not found. Extracting local tarball: $(basename "${tarball_path}")..."
 
-    # 2. Wipe and extract. Tarball's TOP-LEVEL dir name is unstable across
-    #    versions (e.g. rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/), but the
-    #    inner rknn-toolkit2/ dir is consistent — we find it after extract.
+    # 2. Wipe and extract.
     local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
     rm -rf "${repo_dir}"
     mkdir -p "${repo_dir}"
     tar -xzf "${tarball_path}" -C "${repo_dir}" \
         || func_1_2_err "Failed to extract tarball."
 
-    local sdk_dir
-    sdk_dir=$(cd "${repo_dir}" && find . -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
-    # sdk_dir is RELATIVE to repo_dir (e.g. "./rknn-toolkit2-v2.4.0-.../rknn-toolkit2");
-    # build an absolute path for downstream consumers.
-    if [ -z "${sdk_dir}" ]; then
-        func_1_2_err "Could not find rknn-toolkit2/ directory inside tarball.
-  Extracted to: ${repo_dir}"
+    # 3. Flatten any wrapper dir; install. Same call shape as Path A.
+    func_1_5_b_1_flatten_tarball_layout "${repo_dir}"
+    if [ ! -d "${repo_dir}/rknn-toolkit2/packages/x86_64" ]; then
+        func_1_2_err "After extraction, ${repo_dir}/rknn-toolkit2/packages/x86_64 is missing.
+  Tarball does not contain the expected RKNN wheel layout."
     fi
-    sdk_dir="${repo_dir}/${sdk_dir#./}"
-    if [ ! -d "${sdk_dir}/packages/x86_64" ]; then
-        func_1_2_err "Found ${sdk_dir} but no packages/x86_64 inside it.
-  Tarball layout is unexpected. Extracted to: ${repo_dir}"
+    func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
+}
+
+# Detect whether the tarball extracted with a versioned top-level
+# wrapper dir (e.g. rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/) and if so,
+# move the inner rknn-toolkit2/ up one level so the final layout matches
+# what 'git clone' produces.
+#
+# Accepted in-shapes at ${repo_dir}:
+#   (a) rknn-toolkit2/packages/...           -> already correct, no-op
+#   (b) <wrapper>/rknn-toolkit2/packages/... -> mv inner up, rmdir wrapper
+# Anything else: error.
+func_1_5_b_1_flatten_tarball_layout() {
+    local repo_dir="$1"
+
+    # Case (a): no wrapper.
+    if [ -d "${repo_dir}/rknn-toolkit2/packages" ]; then
+        return 0
     fi
 
-    func_1_5_x_install_wheel_from_dir "${sdk_dir}"
+    # Case (b): wrapped. Find the inner rknn-toolkit2/ one level deep.
+    local inner
+    inner=$(find "${repo_dir}" -mindepth 2 -maxdepth 2 -type d -name rknn-toolkit2 | head -n 1)
+    if [ -z "${inner}" ] || [ ! -d "${inner}/packages" ]; then
+        func_1_2_err "Extracted tarball but cannot locate rknn-toolkit2/packages/ in any expected shape.
+  Looked for:    ${repo_dir}/rknn-toolkit2/packages/
+  Also searched: ${repo_dir}/*/rknn-toolkit2/
+  Tarball layout is not recognized. Extracted to: ${repo_dir}"
+    fi
+
+    local wrapper
+    wrapper=$(basename "$(dirname "${inner}")")
+    mv "${inner}" "${repo_dir}/rknn-toolkit2" \
+        || func_1_2_err "Failed to rename ${inner} to ${repo_dir}/rknn-toolkit2"
+    # rmdir (not rm -rf): if the wrapper dir has stray content, fail
+    # loud — the tarball likely has files outside rknn-toolkit2/ we
+    # should know about.
+    rmdir "$(dirname "${inner}")" 2>/dev/null \
+        || func_1_3_debug "Wrapper dir '${wrapper}/' had stray content; left in place."
+    func_1_1_log "Detected wrapper dir '${wrapper}/'; flattened to ${repo_dir}/rknn-toolkit2/"
 }
 
 # Shared: find wheel + install + requirements + onnx constraint
@@ -309,10 +347,17 @@ func_2_1_2_rockchip_repos_init(){
     #          giving user the chance to roll-back / skip BEFORE we touch them
     #      (b) install RKNN Toolkit2: tarball path OR official repo, never both
     #      (c) clone rknn_model_zoo.git (verify-already-handled-or-skipped)
-    func_1_5_2_verify_pinned_sha \
-        "rknn-toolkit2" \
-        "${SDK_ROOT}/rockchip-repos/rknn-toolkit2" \
-        "${RKNN_TOOLKIT2_PINNED_SHA}"
+    #
+    # Skip rknn-toolkit2 verify under tarball mode — tarball users don't
+    # have a git checkout, so pinned-SHA comparison is meaningless.
+    if [ -z "${CFG_RKNN_TARBALL_PATH:-}" ]; then
+        func_1_5_2_verify_pinned_sha \
+            "rknn-toolkit2" \
+            "${SDK_ROOT}/rockchip-repos/rknn-toolkit2" \
+            "${RKNN_TOOLKIT2_PINNED_SHA}"
+    else
+        func_1_1_log "Tarball mode: skipping pinned-SHA check for rknn-toolkit2."
+    fi
     func_1_5_2_verify_pinned_sha \
         "rknn_model_zoo" \
         "${SDK_ROOT}/rockchip-repos/rknn_model_zoo" \
