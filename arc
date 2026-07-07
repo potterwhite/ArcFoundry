@@ -10,35 +10,6 @@ source "${SCRIPT_DIR}/scripts/libs/init-process.sh"
 source "${SCRIPT_DIR}/scripts/libs/time-statics.sh"
 source "${SCRIPT_DIR}/scripts/libs/distclean-process.sh"
 
-# ==============================================================================
-# Level 2: Environment Logic
-# ==============================================================================
-
-func_2_1_init() {
-
-    func_2_1_1_setup_venv
-
-    func_2_1_2_rockchip_repos_init
-
-    func_2_1_3_python_deps_init
-
-    # 4. Validate RKNN + OpenCV stack, and auto-switch to headless OpenCV when needed
-    func_2_1_4_check_rknn_and_cv2
-}
-
-
-func_2_2_distclean() {
-    func_2_2_1_clean
-
-    rm -rf "${VENV_DIR}"
-    func_1_1_log "Virtual Environment removed. Factory reset complete."
-
-    rm -rf "${MODELS_DIR}"
-    func_1_1_log "Models directory removed."
-
-    rm -rf "${RK_REPOS_DIR}"
-    func_1_1_log "Rockchip repositories removed."
-}
 
 # ==============================================================================
 # Main Entry Point (The Router)

@@ -277,16 +277,9 @@ log/
 
 # 11. Local toolchain configuration
 # ----------------------------------------------------------------------------
-# The configs/common/ directory holds user-specific toolchain overrides
-# (e.g. an absolute path to a local rknn-toolkit2 tarball). It is
-# ignored (EXCEPT for the template file + this root .gitignore's docs)
-# so machine-specific absolute paths can never leak to the public
-# github.com/potterwhite/ArcFoundry repo.
-#
-# The actual ignore rules live in `configs/common/.gitignore` (a
-# sub-directory gitignore, kept readable and self-contained). This root
-# file has NO configs/ rules — the sub-directory .gitignore handles
-# everything.
-#
-# Why the root file mentions configs/common/ at all: just for
-# documentation. Real enforcement is in configs/common/.gitignore.
+# rk-toolchain.env holds user-specific absolute paths to a local
+# rknn-toolkit2 tarball. It is ignored so machine-specific paths can
+# never leak to the public github.com/potterwhite/ArcFoundry repo.
+# The template `rk-toolchain.env.example` is git-controlled.
+
+rk-toolchain.env

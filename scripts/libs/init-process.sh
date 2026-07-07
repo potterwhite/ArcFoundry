@@ -1,170 +1,111 @@
 
 # RKNN Toolkit Management
 # ------------------------------------------------------------------------------
-# Toolchain override flow (optional):
-#   - Bash side: func_3_3_load_toolchain_overrides reads the user config +
-#     configs/common/rk-toolchain.yaml via tools/load_toolchain_overrides.py
-#     and sets CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256.
-#   - This side: func_1_5_install_rknn ALWAYS git-clones the official repo
-#     (giving us the directory structure that example scripts depend on).
-#     If CFG_RKNN_TARBALL_PATH is set, func_1_5_1_1_overlay_with_tarball
-#     overwrites the INNER rknn-toolkit2/ subdirectory with the tarball's
-#     content BEFORE wheel search. .git/ stays intact so verify_pinned_sha
-#     keeps working.
+# Two install paths for RKNN Toolkit2. The choice is made at the TOP of
+# func_2_1_2_rockchip_repos_init based on CFG_RKNN_TARBALL_PATH:
+#
+#   - Set   -> func_1_5_b_install_rknn_from_tarball: rm -rf + tar -xzf
+#              local .tgz, then find wheel, pip install. No .git/ preserved.
+#
+#   - Empty -> func_1_5_a_install_rknn_from_official_repo: git clone the
+#              airockchip repo at the pinned SHA, then find wheel, pip install.
+#
+# Both paths share func_1_5_x_install_wheel_from_dir for wheel + requirements
+# + onnx install (the only step that's actually identical).
 # ------------------------------------------------------------------------------
 
-# Overlay rknn-toolkit2 source with a local tarball.
-# Called from func_1_5_install_rknn AFTER git clone (which provides the
-# directory structure that example scripts depend on, see realpath.index
-# in arc) but BEFORE wheel search (so pip installs the tarball's wheel).
-#
-# Why overlay, not replace: example scripts under rockchip-repos/rknn-toolkit2
-# do realpath.index('rknn-toolkit2') to extend sys.path. We must keep the
-# OUTER rknn-toolkit2/ directory (where .git/ lives); only the INNER
-# rknn-toolkit2/ subdirectory (containing packages/, doc/, examples/) gets
-# overwritten from the tarball.
-#
-# Args:
-#   $1 = absolute path to .tgz file (already validated to exist by Python)
-#   $2 = expected SHA256 (empty = skip check, with warning)
-func_1_5_1_1_overlay_with_tarball() {
-    local tarball_path="$1"
-    local expected_sha256="$2"
-    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
-
-    func_1_1_log "Overlaying SDK source with tarball: $(basename "${tarball_path}")"
-
-    # 1. Existence re-check (in case file was deleted between validate and overlay)
-    if [ ! -f "${tarball_path}" ]; then
-        func_1_2_err "Tarball disappeared between validate and overlay: ${tarball_path}"
-    fi
-
-    # 2. SHA256 check
-    if [ -n "${expected_sha256}" ]; then
-        local actual_sha256
-        actual_sha256=$(sha256sum "${tarball_path}" | awk '{print $1}')
-        if [ "${actual_sha256}" != "${expected_sha256}" ]; then
-            func_1_2_err "SHA256 mismatch for tarball:
-    File:      ${tarball_path}
-    Expected:  ${expected_sha256}
-    Actual:    ${actual_sha256}
-  Fix: re-download the tarball from the Rockchip distribution channel and update rknn_toolkit2.tarball_sha256 in your config."
-        fi
-        func_1_1_log "  SHA256 verified: ${actual_sha256:0:16}..."
-    else
-        func_1_1_log "  WARNING: No SHA256 specified, skipping integrity check"
-    fi
-
-    # 3. Extract to temp dir
-    local tmp_dir
-    tmp_dir=$(mktemp -d -t rknn-tarball-XXXXXX) \
-        || func_1_2_err "Failed to create temp dir for tarball extraction"
-    # Ensure cleanup on any error path
-    trap "rm -rf '${tmp_dir}'" RETURN
-
-    func_1_1_log "  Extracting tarball..."
-    tar -xzf "${tarball_path}" -C "${tmp_dir}" \
-        || func_1_2_err "Failed to extract tarball"
-
-    # 4. Locate the rknn-toolkit2/ subdirectory inside the tarball.
-    # The tarball's TOP-LEVEL dir name is unstable across versions (e.g.
-    # rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/), but the SECOND-level
-    # rknn-toolkit2/ dir (containing packages/, doc/, examples/) is consistent
-    # in v2.3.2 and v2.4.0. We search for it.
-    local tarball_sdk_dir
-    tarball_sdk_dir=$(find "${tmp_dir}" -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
-    if [ -z "${tarball_sdk_dir}" ]; then
-        func_1_2_err "Could not find rknn-toolkit2/ subdirectory inside tarball.
-    Expected structure: <top>/rknn-toolkit2/packages/x86_64/*.whl
-    Top-level contents: $(ls -1 "${tmp_dir}")"
-    fi
-
-    # 5. Verify the wheel path actually exists in the tarball
-    if [ ! -d "${tarball_sdk_dir}/packages/x86_64" ]; then
-        func_1_2_err "Found rknn-toolkit2/ in tarball, but no packages/x86_64/ inside.
-    This tarball may not be an x86_64 RKNN SDK.
-    Tarball sdk dir: ${tarball_sdk_dir}"
-    fi
-
-    # 6. Overwrite INNER rknn-toolkit2/ subdirectory
-    #    (OUTER rknn-toolkit2/ with .git/ stays intact)
-    func_1_1_log "  Overwriting ${repo_dir}/rknn-toolkit2/ with tarball content..."
-    rm -rf "${repo_dir}/rknn-toolkit2"
-    cp -r "${tarball_sdk_dir}" "${repo_dir}/rknn-toolkit2" \
-        || func_1_2_err "Failed to copy tarball content into ${repo_dir}/"
-
-    func_1_1_log "  Tarball overlay complete. Wheel source now from tarball."
-}
-
-# RKNN Toolkit Management
-func_1_5_install_rknn() {
-    # 1. Check if already installed
+# Path A: install from official airockchip repo at pinned SHA
+func_1_5_a_install_rknn_from_official_repo() {
     if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
         func_1_1_log "RKNN Toolkit2 already installed in the virtual environment."
         return 0
     fi
+    func_1_1_log "RKNN Toolkit2 not found. Cloning official repo (pinned to ${RKNN_TOOLKIT2_PINNED_SHA:0:7})..."
 
-    func_1_1_log "RKNN Toolkit2 not found. Initiating auto-install..."
-
-    # 2. Define Paths
-    # NOTE: we deliberately drop the ".git" suffix so example scripts under
-    # this repo (which do realpath.index('rknn-toolkit2') to extend sys.path)
-    # resolve correctly. See commit message for the trade-off vs the default
-    # `git clone` naming.
     local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    mkdir -p "${repo_dir}"
+    git clone "${RKNN_TOOLKIT2_REPO_URL}" "${repo_dir}" \
+        || func_1_2_err "Failed to clone rknn-toolkit2 repo."
+    (cd "${repo_dir}" && git checkout "${RKNN_TOOLKIT2_PINNED_SHA}") \
+        || func_1_2_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
 
-    # 3. Clone if missing (full clone + checkout pinned SHA, NOT --depth 1)
-    #    Full clone is required because pinned-SHA checkout needs the SHA to
-    #    be reachable from a ref; depth-1 clones only have the branch tip.
-    if [ ! -d "${repo_dir}" ]; then
-        func_1_1_log "Cloning rknn-toolkit2 repository (pinned to ${RKNN_TOOLKIT2_PINNED_SHA:0:7})..."
-        # Ensure parent dir exists
-        mkdir -p "$(dirname "${repo_dir}")"
-        git clone "${RKNN_TOOLKIT2_REPO_URL}" "${repo_dir}" \
-            || func_1_2_err "Failed to clone rknn-toolkit2 repo."
-        (cd "${repo_dir}" && git checkout "${RKNN_TOOLKIT2_PINNED_SHA}") \
-            || func_1_2_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
+    func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
+}
+
+# Path B: install from a local tarball (CFG_RKNN_TARBALL_PATH set)
+func_1_5_b_install_rknn_from_tarball() {
+    local tarball_path="${CFG_RKNN_TARBALL_PATH}"
+    local expected_sha256="${CFG_RKNN_TARBALL_SHA256:-}"
+
+    # 1. Validate
+    if [ ! -f "${tarball_path}" ]; then
+        func_1_2_err "Tarball not found: ${tarball_path}"
+    fi
+    if [ -n "${expected_sha256}" ]; then
+        local actual_sha256
+        actual_sha256=$(sha256sum "${tarball_path}" | awk '{print $1}')
+        if [ "${actual_sha256}" != "${expected_sha256}" ]; then
+            func_1_2_err "SHA256 mismatch for ${tarball_path}
+    Expected: ${expected_sha256}
+    Actual:   ${actual_sha256}
+  Fix: re-download the tarball and update RKNN_TARBALL_SHA256 in rk-toolchain.env."
+        fi
+        func_1_1_log "  SHA256 verified: ${actual_sha256:0:16}..."
+    else
+        func_1_1_log "  WARNING: no SHA256 specified, skipping integrity check"
     fi
 
-    # 3b. Optional: overlay wheel source with a local tarball.
-    #     Only runs if the user (or configs/common/rk-toolchain.yaml) supplied
-    #     a tarball_path. CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256 are
-    #     set by func_3_3_load_toolchain_overrides BEFORE this function runs.
-    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
-        func_1_5_1_1_overlay_with_tarball \
-            "${CFG_RKNN_TARBALL_PATH}" \
-            "${CFG_RKNN_TARBALL_SHA256:-}"
+    if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        func_1_1_log "RKNN Toolkit2 already installed in the virtual environment."
+        return 0
+    fi
+    func_1_1_log "RKNN Toolkit2 not found. Extracting local tarball: $(basename "${tarball_path}")..."
+
+    # 2. Wipe and extract. Tarball's TOP-LEVEL dir name is unstable across
+    #    versions (e.g. rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/), but the
+    #    inner rknn-toolkit2/ dir is consistent — we find it after extract.
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    rm -rf "${repo_dir}"
+    mkdir -p "${repo_dir}"
+    tar -xzf "${tarball_path}" -C "${repo_dir}" \
+        || func_1_2_err "Failed to extract tarball."
+
+    local sdk_dir
+    sdk_dir=$(find "${repo_dir}" -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
+    if [ -z "${sdk_dir}" ] || [ ! -d "${sdk_dir}/packages/x86_64" ]; then
+        func_1_2_err "Could not find rknn-toolkit2/packages/x86_64 inside tarball.
+  Extracted to: ${repo_dir}"
     fi
 
-    # 4. Find the correct Wheel file for Python 3.x (cp3x) on x86_64
-    # Pattern: rknn_toolkit2-*-cp3x-cp3x-manylinux*x86_64.whl
-    func_1_1_log "Searching for RKNN Toolkit2 wheel package..."
-    local search_path="${repo_dir}/rknn-toolkit2/packages/x86_64"
+    func_1_5_x_install_wheel_from_dir "${sdk_dir}"
+}
+
+# Shared: find wheel + install + requirements + onnx constraint
+func_1_5_x_install_wheel_from_dir() {
+    local sdk_dir="$1"
+    local search_path="${sdk_dir}/packages/x86_64"
+
+    func_1_1_log "Searching for RKNN Toolkit2 wheel in ${search_path}..."
     local whl_file
     whl_file=$(find "${search_path}" -name "rknn_toolkit2*-${WHEEL_TAG}-${WHEEL_TAG}-*x86_64.whl" | head -n 1)
-
     if [ -z "${whl_file}" ]; then
-        func_1_2_err "Could not find compatible .whl file in: ${search_path}"
+        func_1_2_err "Could not find compatible .whl in: ${search_path}"
     fi
 
-    # 5. Install RKNN Toolkit2 wheel into the venv
-    func_1_1_log "\nInstalling: $(basename "${whl_file}")"
+    func_1_1_log "Installing: $(basename "${whl_file}")"
     "${PIP_BIN}" install "${whl_file}" || func_1_2_err "Failed to install RKNN Toolkit2."
 
-    # 6. Install official RKNN runtime requirements matching the current Python tag
-    local requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
-
+    local requirements_file
+    requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
     if [ -f "${requirements_file}" ]; then
-        func_1_1_log "\nInstalling: $(basename "${requirements_file}")"
+        func_1_1_log "Installing: $(basename "${requirements_file}")"
         "${PIP_BIN}" install -r "${requirements_file}" || func_1_2_err "Failed to install requirements.txt."
     else
-        # func_1_2_err "Could not find compatible requirements.txt file in: ${search_path}"
-        func_1_1_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping RKNN extra requirements."
+        func_1_1_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping."
     fi
 
-    # 7. Force ONNX version compatible with RKNN Toolkit2
-    func_1_1_log "\nEnsuring ONNX version is compatible with RKNN Toolkit2 (onnx>=1.16.1,<1.19.0)..."
-    "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_2_err "Failed to install a compatible ONNX version."
+    func_1_1_log "Ensuring ONNX version is compatible (onnx>=1.16.1,<1.19.0)..."
+    "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_2_err "Failed to install compatible ONNX."
 
     func_1_1_log "RKNN Toolkit2 installed successfully."
 }
@@ -352,11 +293,14 @@ func_2_1_1_setup_venv(){
 }
 
 func_2_1_2_rockchip_repos_init(){
+
+    func_3_3_load_toolchain_env
+
     # 2. Check/Install RKNN Toolkit2 (The Auto-Magic Step)
     #    Order matters:
     #      (a) verify both rockchip repos against their pinned SHA,
     #          giving user the chance to roll-back / skip BEFORE we touch them
-    #      (b) install RKNN Toolkit2 (which clones rknn-toolkit2.git if absent)
+    #      (b) install RKNN Toolkit2: tarball path OR official repo, never both
     #      (c) clone rknn_model_zoo.git (verify-already-handled-or-skipped)
     func_1_5_2_verify_pinned_sha \
         "rknn-toolkit2" \
@@ -367,7 +311,12 @@ func_2_1_2_rockchip_repos_init(){
         "${SDK_ROOT}/rockchip-repos/rknn_model_zoo" \
         "${RKNN_MODEL_ZOO_PINNED_SHA}"
 
-    func_1_5_install_rknn
+    # 3. Pick install path: tarball OR official repo. Single dispatch.
+    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
+        func_1_5_b_install_rknn_from_tarball
+    else
+        func_1_5_a_install_rknn_from_official_repo
+    fi
     func_1_5_3_clone_rknn_model_zoo
 }
 
@@ -421,66 +370,36 @@ EOF
     func_1_2_err "RKNN / OpenCV environment check still failed even after installing opencv-python-headless."
 }
 
-# Pre-flight toolchain config loader.
-# Called from func_3_2_launch_kernel BEFORE func_2_1_init.
-#
-# Reads the user config (+ configs/common/rk-toolchain.yaml auto-merge),
-# validates the rknn_toolkit2 fields, and exports CFG_RKNN_TARBALL_PATH +
-# CFG_RKNN_TARBALL_SHA256 in this shell. The actual validation logic lives
-# in tools/load_toolchain_overrides.py (so main.py can reuse it via
-# load_merged_config).
-#
-# Python interpreter choice:
-#   - Prefer the venv python if it already exists (always has PyYAML from
-#     envs/requirements.txt).
-#   - Fall back to the host python for first-run. PyYAML must be installed
-#     there, OR we error out with a clear install hint.
-func_3_3_load_toolchain_overrides() {
-    local helper_script="${SDK_ROOT}/tools/load_toolchain_overrides.py"
-    if [ ! -f "${helper_script}" ]; then
-        func_1_2_err "Toolchain override helper not found: ${helper_script}
-    Did you accidentally delete tools/load_toolchain_overrides.py?"
+# Pre-flight: read rk-toolchain.env (if present) and set CFG_RKNN_TARBALL_PATH
+# / CFG_RKNN_TARBALL_SHA256. Pure bash, no Python, no YAML, no helper script.
+# No env file (the common case) = use official airockchip repo.
+func_3_3_load_toolchain_env() {
+    local env_file="${SDK_ROOT}/rk-toolchain.env"
+    if [ ! -f "${env_file}" ]; then
+        func_1_1_log "No rk-toolchain.env found. Will use official airockchip repo."
+        export CFG_RKNN_TARBALL_PATH=""
+        export CFG_RKNN_TARBALL_SHA256=""
+        return 0
     fi
-
-    # Choose python interpreter
-    local py_bin
-    if [ -x "${VENV_DIR}/bin/python" ]; then
-        py_bin="${VENV_DIR}/bin/python"
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    export CFG_RKNN_TARBALL_PATH="${RKNN_TARBALL_PATH:-}"
+    export CFG_RKNN_TARBALL_SHA256="${RKNN_TARBALL_SHA256:-}"
+    if [ -n "${CFG_RKNN_TARBALL_PATH}" ]; then
+        func_1_1_log "Loaded rk-toolchain.env: tarball=${CFG_RKNN_TARBALL_PATH}"
     else
-        py_bin="${HOST_PYTHON_BIN}"
-        if ! "${py_bin}" -c "import yaml" &> /dev/null; then
-            func_1_2_err "First-run requires PyYAML on system python (${py_bin}).
-    Install with:    ${py_bin} -m pip install pyyaml
-    Or run './arc init' once to create the venv (with PyYAML in requirements.txt), then re-run."
-        fi
+        func_1_1_log "rk-toolchain.env present but RKNN_TARBALL_PATH empty; using official repo."
     fi
+}
 
-    func_1_1_log "Loading toolchain overrides from config: $(basename "${SELECTED_CONFIG}")"
+func_2_1_init() {
 
-    # Capture helper output (the helper prints `export VAR='value'` lines).
-    local helper_output
-    if ! helper_output=$("${py_bin}" "${helper_script}" "${SELECTED_CONFIG}" "${SDK_ROOT}" 2>&1); then
-        func_1_2_err "Failed to load toolchain overrides:
-${helper_output}"
-    fi
+    func_2_1_1_setup_venv
 
-    # Apply the export lines in this shell
-    eval "${helper_output}"
+    func_2_1_2_rockchip_repos_init
 
-    # Echo what we decided (so the user sees it in the log)
-    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
-        func_1_1_log "  Toolchain override active: tarball_path=${CFG_RKNN_TARBALL_PATH}"
-        if [ -n "${CFG_RKNN_TARBALL_SHA256:-}" ]; then
-            func_1_1_log "  sha256=${CFG_RKNN_TARBALL_SHA256:0:16}... (will be verified before install)"
-        else
-            func_1_1_log "  WARNING: no SHA256 specified, integrity will NOT be checked at install"
-        fi
-    else
-        # Discoverability: users on a partner-only SDK (e.g. RV1126B v2.4.0)
-        # wouldn't otherwise know this is the way in. Point at the template.
-        func_1_1_log "  No toolchain override; will use official airockchip repo (v2.3.2)."
-        func_1_1_log "  Need a non-GitHub SDK version? Copy the template and fill it in:"
-        func_1_1_log "      cp configs/common/rk-toolchain.template.yaml \\"
-        func_1_1_log "         configs/common/rk-toolchain.yaml"
-    fi
+    func_2_1_3_python_deps_init
+
+    # 4. Validate RKNN + OpenCV stack, and auto-switch to headless OpenCV when needed
+    func_2_1_4_check_rknn_and_cv2
 }

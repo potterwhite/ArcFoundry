@@ -127,11 +127,10 @@ func_3_2_launch_kernel() {
     fi
     func_1_1_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
-    # Load toolchain overrides from the user config (+ configs/common/rk-toolchain.yaml
-    # if present). This sets CFG_RKNN_TARBALL_PATH and CFG_RKNN_TARBALL_SHA256, which
-    # func_1_5_install_rknn consumes to decide whether to overlay the wheel source.
+    # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
+    # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
     # Must run BEFORE func_2_1_init.
-    func_3_3_load_toolchain_overrides
+    func_3_3_load_toolchain_env
 
     func_2_1_init || return 1
 
