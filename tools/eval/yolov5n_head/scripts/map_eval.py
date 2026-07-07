@@ -37,8 +37,11 @@ from rknn.api import RKNN
 # HARDCODED PATHS — change here if files move
 # ════════════════════════════════════════════════════════════════
 ONNX_PATH     = "/development/src/ai/camera-auto-tracking/ArcFoundry.git/yolov5n_head.onnx"
-RKNN_FP16     = "/home/developer/camera-auto-tracking/ArcFoundry.git/output/rv1126b_yolov5n_head_fp16_640x640_20260707_release/yolov5n_head_fp16.rknn"
-RKNN_INT8     = "/home/developer/camera-auto-tracking/ArcFoundry.git/output/rv1126b_yolov5n_head_int8_640x640_20260707_release/yolov5n_head_int8.rknn"
+# NOTE: RKNN simulator cannot consume a pre-compiled .rknn file — it requires the
+#       `load_onnx → build → init_runtime(target=None)` sequence (see _comparator.py).
+#       Both 'fp16' and 'int8' runs here rebuild the model in memory from ONNX.
+#       Without a calibration dataset in this script we can only do FP16 shadow
+#       builds — INT8 fidelity is a separate on-device concern.
 IMG_DIR       = "/home/developer/camera-auto-tracking/yolov5/yolov5/datasets/head/images/valid"
 LABEL_DIR     = "/home/developer/camera-auto-tracking/yolov5/yolov5/datasets/head/labels/valid"
 WORKSPACE     = Path("/home/developer/camera-auto-tracking/ArcFoundry.eval/yolov5n_head_int8")
@@ -263,12 +266,34 @@ def main():
                 p(f"  onnx {i+1}/{len(img_paths)}")
         return all_preds
 
-    def run_rknn(rknn_path):
+    def run_rknn(mode):
+        """Shadow-build from ONNX, then run on the PC simulator.
+
+        Why `load_rknn` is gone: rknn-toolkit2 explicitly refuses it for simulator
+        ("RKNN model that loaded by 'load_rknn' not support inference on the
+        simulator, please set 'target' first"). The fix is the shadow build
+        pattern from `core/pipeline/iii_conversion/_comparator.py`:
+            load_onnx → build(do_quantization=False) → init_runtime(target=None).
+
+        NOTE: with no calibration dataset wired in here, both 'fp16' and 'int8'
+        end up running the same FP16 shadow build. Treating them as identical
+        until a calibration dataset (or on-device INT8 eval) is wired up.
+        """
+        assert mode in ('fp16', 'int8')
         rknn = RKNN(verbose=False)
         rknn.config(mean_values=[[0, 0, 0]], std_values=[[255, 255, 255]],
                     target_platform=TARGET)
-        rknn.load_rknn(rknn_path)
-        rknn.init_runtime()  # target=None → simulator (no adb needed)
+        # 1. Load the SOURCE ONNX — not a pre-compiled .rknn.
+        if rknn.load_onnx(model=ONNX_PATH) != 0:
+            raise RuntimeError(f"[{mode}] load_onnx failed")
+        # 2. Shadow build in memory. `do_quantization=False` → FP16 model.
+        #    (INT8 quantization would need `do_quantization=True` + a
+        #    calibration dataset — out of scope for this eval.)
+        if rknn.build(do_quantization=False) != 0:
+            raise RuntimeError(f"[{mode}] build (simulator) failed")
+        # 3. `target=None` selects the PC simulator, no adb required.
+        if rknn.init_runtime(target=None) != 0:
+            raise RuntimeError(f"[{mode}] init_runtime (simulator) failed")
         all_preds = []
         for i, ip in enumerate(img_paths):
             img_id = Path(ip).stem
@@ -280,7 +305,7 @@ def main():
                 dets = unletterbox(dets, pad, r, h0, w0)
                 all_preds.append((img_id, conf, dets))
             if (i+1) % 50 == 0 or i == len(img_paths)-1:
-                p(f"  rknn {i+1}/{len(img_paths)}")
+                p(f"  {mode} {i+1}/{len(img_paths)}")
         rknn.release()
         return all_preds
 
@@ -307,7 +332,7 @@ def main():
     p("RUNNING: RKNN FP16 (simulator)")
     p("=" * 60)
     t0 = time.time()
-    fp16_preds = run_rknn(RKNN_FP16)
+    fp16_preds = run_rknn('fp16')
     p(f"[fp16] {time.time()-t0:.1f}s total")
     report("fp16", fp16_preds)
     p("")
@@ -316,7 +341,7 @@ def main():
     p("RUNNING: RKNN INT8 (the one we want to verify)")
     p("=" * 60)
     t0 = time.time()
-    int8_preds = run_rknn(RKNN_INT8)
+    int8_preds = run_rknn('int8')
     p(f"[int8] {time.time()-t0:.1f}s total")
     report("int8", int8_preds)
     p("")
