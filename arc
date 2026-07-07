@@ -117,6 +117,103 @@ func_1_4_show_help() {
 }
 
 # RKNN Toolkit Management
+# ------------------------------------------------------------------------------
+# Toolchain override flow (optional):
+#   - Bash side: func_3_3_load_toolchain_overrides reads the user config +
+#     .config/common/rk-toolchain.yaml via tools/load_toolchain_overrides.py
+#     and sets CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256.
+#   - This side: func_1_5_install_rknn ALWAYS git-clones the official repo
+#     (giving us the directory structure that example scripts depend on).
+#     If CFG_RKNN_TARBALL_PATH is set, func_1_5_1_1_overlay_with_tarball
+#     overwrites the INNER rknn-toolkit2/ subdirectory with the tarball's
+#     content BEFORE wheel search. .git/ stays intact so verify_pinned_sha
+#     keeps working.
+# ------------------------------------------------------------------------------
+
+# Overlay rknn-toolkit2 source with a local tarball.
+# Called from func_1_5_install_rknn AFTER git clone (which provides the
+# directory structure that example scripts depend on, see realpath.index
+# in arc) but BEFORE wheel search (so pip installs the tarball's wheel).
+#
+# Why overlay, not replace: example scripts under rockchip-repos/rknn-toolkit2
+# do realpath.index('rknn-toolkit2') to extend sys.path. We must keep the
+# OUTER rknn-toolkit2/ directory (where .git/ lives); only the INNER
+# rknn-toolkit2/ subdirectory (containing packages/, doc/, examples/) gets
+# overwritten from the tarball.
+#
+# Args:
+#   $1 = absolute path to .tgz file (already validated to exist by Python)
+#   $2 = expected SHA256 (empty = skip check, with warning)
+func_1_5_1_1_overlay_with_tarball() {
+    local tarball_path="$1"
+    local expected_sha256="$2"
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+
+    func_1_1_log "Overlaying SDK source with tarball: $(basename "${tarball_path}")"
+
+    # 1. Existence re-check (in case file was deleted between validate and overlay)
+    if [ ! -f "${tarball_path}" ]; then
+        func_1_2_err "Tarball disappeared between validate and overlay: ${tarball_path}"
+    fi
+
+    # 2. SHA256 check
+    if [ -n "${expected_sha256}" ]; then
+        local actual_sha256
+        actual_sha256=$(sha256sum "${tarball_path}" | awk '{print $1}')
+        if [ "${actual_sha256}" != "${expected_sha256}" ]; then
+            func_1_2_err "SHA256 mismatch for tarball:
+    File:      ${tarball_path}
+    Expected:  ${expected_sha256}
+    Actual:    ${actual_sha256}
+  Fix: re-download the tarball from the Rockchip distribution channel and update rknn_toolkit2.tarball_sha256 in your config."
+        fi
+        func_1_1_log "  SHA256 verified: ${actual_sha256:0:16}..."
+    else
+        func_1_1_log "  WARNING: No SHA256 specified, skipping integrity check"
+    fi
+
+    # 3. Extract to temp dir
+    local tmp_dir
+    tmp_dir=$(mktemp -d -t rknn-tarball-XXXXXX) \
+        || func_1_2_err "Failed to create temp dir for tarball extraction"
+    # Ensure cleanup on any error path
+    trap "rm -rf '${tmp_dir}'" RETURN
+
+    func_1_1_log "  Extracting tarball..."
+    tar -xzf "${tarball_path}" -C "${tmp_dir}" \
+        || func_1_2_err "Failed to extract tarball"
+
+    # 4. Locate the rknn-toolkit2/ subdirectory inside the tarball.
+    # The tarball's TOP-LEVEL dir name is unstable across versions (e.g.
+    # rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/), but the SECOND-level
+    # rknn-toolkit2/ dir (containing packages/, doc/, examples/) is consistent
+    # in v2.3.2 and v2.4.0. We search for it.
+    local tarball_sdk_dir
+    tarball_sdk_dir=$(find "${tmp_dir}" -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
+    if [ -z "${tarball_sdk_dir}" ]; then
+        func_1_2_err "Could not find rknn-toolkit2/ subdirectory inside tarball.
+    Expected structure: <top>/rknn-toolkit2/packages/x86_64/*.whl
+    Top-level contents: $(ls -1 "${tmp_dir}")"
+    fi
+
+    # 5. Verify the wheel path actually exists in the tarball
+    if [ ! -d "${tarball_sdk_dir}/packages/x86_64" ]; then
+        func_1_2_err "Found rknn-toolkit2/ in tarball, but no packages/x86_64/ inside.
+    This tarball may not be an x86_64 RKNN SDK.
+    Tarball sdk dir: ${tarball_sdk_dir}"
+    fi
+
+    # 6. Overwrite INNER rknn-toolkit2/ subdirectory
+    #    (OUTER rknn-toolkit2/ with .git/ stays intact)
+    func_1_1_log "  Overwriting ${repo_dir}/rknn-toolkit2/ with tarball content..."
+    rm -rf "${repo_dir}/rknn-toolkit2"
+    cp -r "${tarball_sdk_dir}" "${repo_dir}/rknn-toolkit2" \
+        || func_1_2_err "Failed to copy tarball content into ${repo_dir}/"
+
+    func_1_1_log "  Tarball overlay complete. Wheel source now from tarball."
+}
+
+# RKNN Toolkit Management
 func_1_5_install_rknn() {
     # 1. Check if already installed
     if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
@@ -144,6 +241,16 @@ func_1_5_install_rknn() {
             || func_1_2_err "Failed to clone rknn-toolkit2 repo."
         (cd "${repo_dir}" && git checkout "${RKNN_TOOLKIT2_PINNED_SHA}") \
             || func_1_2_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
+    fi
+
+    # 3b. Optional: overlay wheel source with a local tarball.
+    #     Only runs if the user (or .config/common/rk-toolchain.yaml) supplied
+    #     a tarball_path. CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256 are
+    #     set by func_3_3_load_toolchain_overrides BEFORE this function runs.
+    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
+        func_1_5_1_1_overlay_with_tarball \
+            "${CFG_RKNN_TARBALL_PATH}" \
+            "${CFG_RKNN_TARBALL_SHA256:-}"
     fi
 
     # 4. Find the correct Wheel file for Python 3.x (cp3x) on x86_64
@@ -704,6 +811,12 @@ func_3_2_launch_kernel() {
     fi
     func_1_1_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
+    # Load toolchain overrides from the user config (+ .config/common/rk-toolchain.yaml
+    # if present). This sets CFG_RKNN_TARBALL_PATH and CFG_RKNN_TARBALL_SHA256, which
+    # func_1_5_install_rknn consumes to decide whether to overlay the wheel source.
+    # Must run BEFORE func_2_1_setup_venv.
+    func_3_3_load_toolchain_overrides
+
     func_2_1_setup_venv || return 1
 
     func_1_9_start_time_count __SECOND_STAGE_BUILD_START_TIME
@@ -731,6 +844,65 @@ func_3_2_launch_kernel() {
 # ==============================================================================
 # Level 4: Execution Modes (The 3 Ways to Run)
 # ==============================================================================
+
+# Pre-flight toolchain config loader.
+# Called from func_3_2_launch_kernel BEFORE func_2_1_setup_venv.
+#
+# Reads the user config (+ .config/common/rk-toolchain.yaml auto-merge),
+# validates the rknn_toolkit2 fields, and exports CFG_RKNN_TARBALL_PATH +
+# CFG_RKNN_TARBALL_SHA256 in this shell. The actual validation logic lives
+# in tools/load_toolchain_overrides.py (so main.py can reuse it via
+# load_merged_config).
+#
+# Python interpreter choice:
+#   - Prefer the venv python if it already exists (always has PyYAML from
+#     envs/requirements.txt).
+#   - Fall back to the host python for first-run. PyYAML must be installed
+#     there, OR we error out with a clear install hint.
+func_3_3_load_toolchain_overrides() {
+    local helper_script="${SDK_ROOT}/tools/load_toolchain_overrides.py"
+    if [ ! -f "${helper_script}" ]; then
+        func_1_2_err "Toolchain override helper not found: ${helper_script}
+    Did you accidentally delete tools/load_toolchain_overrides.py?"
+    fi
+
+    # Choose python interpreter
+    local py_bin
+    if [ -x "${VENV_DIR}/bin/python" ]; then
+        py_bin="${VENV_DIR}/bin/python"
+    else
+        py_bin="${HOST_PYTHON_BIN}"
+        if ! "${py_bin}" -c "import yaml" &> /dev/null; then
+            func_1_2_err "First-run requires PyYAML on system python (${py_bin}).
+    Install with:    ${py_bin} -m pip install pyyaml
+    Or run './arc init' once to create the venv (with PyYAML in requirements.txt), then re-run."
+        fi
+    fi
+
+    func_1_1_log "Loading toolchain overrides from config: $(basename "${SELECTED_CONFIG}")"
+
+    # Capture helper output (the helper prints `export VAR='value'` lines).
+    local helper_output
+    if ! helper_output=$("${py_bin}" "${helper_script}" "${SELECTED_CONFIG}" "${SDK_ROOT}" 2>&1); then
+        func_1_2_err "Failed to load toolchain overrides:
+${helper_output}"
+    fi
+
+    # Apply the export lines in this shell
+    eval "${helper_output}"
+
+    # Echo what we decided (so the user sees it in the log)
+    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
+        func_1_1_log "  Toolchain override active: tarball_path=${CFG_RKNN_TARBALL_PATH}"
+        if [ -n "${CFG_RKNN_TARBALL_SHA256:-}" ]; then
+            func_1_1_log "  sha256=${CFG_RKNN_TARBALL_SHA256:0:16}... (will be verified before install)"
+        else
+            func_1_1_log "  WARNING: no SHA256 specified, integrity will NOT be checked at install"
+        fi
+    else
+        func_1_1_log "  No toolchain override; will use official repo (v2.3.2)"
+    fi
+}
 
 # Mode 1: Interactive Menu (Lazy Mode)
 func_4_1_mode_menu() {
