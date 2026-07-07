@@ -36,7 +36,7 @@ class PipelineEngine:
 
     def __init__(self, config_path):
         self.config_path = config_path
-        # load_merged_config auto-merges .config/common/rk-toolchain.yaml (if
+        # load_merged_config auto-merges configs/common/rk-toolchain.yaml (if
         # present) and validates the rknn_toolkit2 fields. Raises ValueError
         # with clear file/field/fix messages on bad config.
         self.cfg = load_merged_config(config_path)

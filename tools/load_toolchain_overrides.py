@@ -5,7 +5,7 @@
 # ============================================================================
 # Pre-flight toolchain config loader, called by `arc` BEFORE `func_2_1_setup_venv`.
 #
-# Reads the user-specified YAML config, auto-merges .config/common/rk-toolchain.yaml
+# Reads the user-specified YAML config, auto-merges configs/common/rk-toolchain.yaml
 # (if present), validates the rknn_toolkit2 fields, and emits bash-compatible
 # `export VAR=value` lines on stdout for arc to `eval`.
 #
@@ -33,13 +33,13 @@ import sys
 def _resolve_sdk_root(provided, config_path):
     """
     Trust the explicit sdk_root if given; otherwise walk up from config_path
-    looking for a `.config/` subdir (the SDK_ROOT marker).
+    looking for a `configs/common/` subdir (the SDK_ROOT marker).
     """
     if provided:
         return os.path.abspath(provided)
     cur = os.path.dirname(os.path.abspath(config_path))
     while cur and cur != "/":
-        if os.path.isdir(os.path.join(cur, ".config")):
+        if os.path.isdir(os.path.join(cur, "configs", "common")):
             return cur
         parent = os.path.dirname(cur)
         if parent == cur:

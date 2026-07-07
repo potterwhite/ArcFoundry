@@ -34,7 +34,7 @@ def load_config_file(path):
     Backward-compat thin wrapper. Prefer load_merged_config() in new code.
 
     Historically, this only loaded a single YAML file. As of the rknn_toolkit2
-    override feature, configs auto-merge with .config/common/rk-toolchain.yaml
+    override feature, configs auto-merge with configs/common/rk-toolchain.yaml
     if it exists — see load_merged_config for details.
     """
     return load_merged_config(path)
@@ -81,7 +81,7 @@ def _validate_rknn_toolkit2(cfg, file_path):
         raise ValueError(
             f"rknn_toolkit2 must be a YAML mapping, got: {type(rt).__name__}\n"
             f"  File: {file_path}\n"
-            f"  Fix: see schema in .config/common/rk-toolchain.template.yaml"
+            f"  Fix: see schema in configs/common/rk-toolchain.template.yaml"
         )
 
     tarball_path = rt.get("tarball_path", "")
@@ -110,13 +110,13 @@ def _validate_rknn_toolkit2(cfg, file_path):
 
 def _locate_sdk_root(config_path):
     """
-    Walk up from config_path looking for a directory that contains a `.config/`
-    subdir — that's our SDK_ROOT. Falls back to the parent of the .git dir, then
-    to cwd. Returns absolute path string.
+    Walk up from config_path looking for a directory that contains a `configs/`
+    subdir (with `common/` underneath) — that's our SDK_ROOT. Falls back to the
+    parent of the .git dir, then to cwd. Returns absolute path string.
     """
     cur = os.path.dirname(os.path.abspath(config_path))
     while cur and cur != "/":
-        if os.path.isdir(os.path.join(cur, ".config")):
+        if os.path.isdir(os.path.join(cur, "configs", "common")):
             return cur
         parent = os.path.dirname(cur)
         if parent == cur:
@@ -136,7 +136,7 @@ def _locate_sdk_root(config_path):
 
 def load_merged_config(config_path, sdk_root=None):
     """
-    Load a user YAML config, auto-merging .config/common/rk-toolchain.yaml if
+    Load a user YAML config, auto-merging configs/common/rk-toolchain.yaml if
     present. Validates the rknn_toolkit2 field (each file validated separately
     so error messages name the correct source file).
 
@@ -147,7 +147,7 @@ def load_merged_config(config_path, sdk_root=None):
     Args:
         config_path: Path to the user's YAML config.
         sdk_root:    SDK root directory. If None, derived by walking up from
-                     config_path looking for a `.config/` directory.
+                     config_path looking for a `configs/common/` directory.
 
     Returns:
         Merged config dict.
@@ -174,7 +174,7 @@ def load_merged_config(config_path, sdk_root=None):
     sdk_root = os.path.abspath(sdk_root)
 
     # Auto-merge common config if it exists
-    common_path = os.path.join(sdk_root, ".config", "common", "rk-toolchain.yaml")
+    common_path = os.path.join(sdk_root, "configs", "common", "rk-toolchain.yaml")
     if os.path.isfile(common_path):
         with open(common_path, "r") as f:
             common_cfg = yaml.safe_load(f) or {}

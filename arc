@@ -120,7 +120,7 @@ func_1_4_show_help() {
 # ------------------------------------------------------------------------------
 # Toolchain override flow (optional):
 #   - Bash side: func_3_3_load_toolchain_overrides reads the user config +
-#     .config/common/rk-toolchain.yaml via tools/load_toolchain_overrides.py
+#     configs/common/rk-toolchain.yaml via tools/load_toolchain_overrides.py
 #     and sets CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256.
 #   - This side: func_1_5_install_rknn ALWAYS git-clones the official repo
 #     (giving us the directory structure that example scripts depend on).
@@ -244,7 +244,7 @@ func_1_5_install_rknn() {
     fi
 
     # 3b. Optional: overlay wheel source with a local tarball.
-    #     Only runs if the user (or .config/common/rk-toolchain.yaml) supplied
+    #     Only runs if the user (or configs/common/rk-toolchain.yaml) supplied
     #     a tarball_path. CFG_RKNN_TARBALL_PATH / CFG_RKNN_TARBALL_SHA256 are
     #     set by func_3_3_load_toolchain_overrides BEFORE this function runs.
     if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
@@ -811,7 +811,7 @@ func_3_2_launch_kernel() {
     fi
     func_1_1_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
-    # Load toolchain overrides from the user config (+ .config/common/rk-toolchain.yaml
+    # Load toolchain overrides from the user config (+ configs/common/rk-toolchain.yaml
     # if present). This sets CFG_RKNN_TARBALL_PATH and CFG_RKNN_TARBALL_SHA256, which
     # func_1_5_install_rknn consumes to decide whether to overlay the wheel source.
     # Must run BEFORE func_2_1_setup_venv.
@@ -848,7 +848,7 @@ func_3_2_launch_kernel() {
 # Pre-flight toolchain config loader.
 # Called from func_3_2_launch_kernel BEFORE func_2_1_setup_venv.
 #
-# Reads the user config (+ .config/common/rk-toolchain.yaml auto-merge),
+# Reads the user config (+ configs/common/rk-toolchain.yaml auto-merge),
 # validates the rknn_toolkit2 fields, and exports CFG_RKNN_TARBALL_PATH +
 # CFG_RKNN_TARBALL_SHA256 in this shell. The actual validation logic lives
 # in tools/load_toolchain_overrides.py (so main.py can reuse it via
