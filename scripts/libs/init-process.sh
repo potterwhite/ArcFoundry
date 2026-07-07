@@ -71,10 +71,17 @@ func_1_5_b_install_rknn_from_tarball() {
         || func_1_2_err "Failed to extract tarball."
 
     local sdk_dir
-    sdk_dir=$(find "${repo_dir}" -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
-    if [ -z "${sdk_dir}" ] || [ ! -d "${sdk_dir}/packages/x86_64" ]; then
-        func_1_2_err "Could not find rknn-toolkit2/packages/x86_64 inside tarball.
+    sdk_dir=$(cd "${repo_dir}" && find . -maxdepth 3 -type d -name rknn-toolkit2 | head -n 1)
+    # sdk_dir is RELATIVE to repo_dir (e.g. "./rknn-toolkit2-v2.4.0-.../rknn-toolkit2");
+    # build an absolute path for downstream consumers.
+    if [ -z "${sdk_dir}" ]; then
+        func_1_2_err "Could not find rknn-toolkit2/ directory inside tarball.
   Extracted to: ${repo_dir}"
+    fi
+    sdk_dir="${repo_dir}/${sdk_dir#./}"
+    if [ ! -d "${sdk_dir}/packages/x86_64" ]; then
+        func_1_2_err "Found ${sdk_dir} but no packages/x86_64 inside it.
+  Tarball layout is unexpected. Extracted to: ${repo_dir}"
     fi
 
     func_1_5_x_install_wheel_from_dir "${sdk_dir}"

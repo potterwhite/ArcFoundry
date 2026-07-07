@@ -85,15 +85,12 @@ func_1_4_show_help() {
     echo "  init        : Force env init (clone/pin Rockchip repos + install rknn-toolkit2 wheel; needs network)"
     echo "  help, -h    : Show this help message"
     echo ""
-    echo "--- Toolchain override (use a non-GitHub RKNN SDK version) ---"
-    echo "  Some RKNN SDK versions (e.g. v2.4.0 for RV1126B) are NOT published"
-    echo "  on github.com/airockchip. To use one, copy the template and fill in"
-    echo "  the absolute path to your local .tgz:"
-    echo "      cp configs/common/rk-toolchain.template.yaml \\"
-    echo "         configs/common/rk-toolchain.yaml"
-    echo "      \$EDITOR configs/common/rk-toolchain.yaml   # set tarball_path + sha256"
-    echo "  arc auto-detects it. See configs/common/rk-toolchain.template.yaml"
-    echo "  for full field docs and validation rules."
+    echo "--- Use a local RKNN SDK tarball (rknpu2) ---"
+    echo "  Default: clones rknn-toolkit2 from GitHub."
+    echo "  To use a local .tgz (e.g. an SDK version not on GitHub):"
+    echo "      cp rk-toolchain.env.example rk-toolchain.env"
+    echo "      \$EDITOR rk-toolchain.env   # set RKNN_TARBALL_PATH (+ SHA256)"
+    echo "  arc auto-detects rk-toolchain.env and installs from it."
 }
 
 func_1_6_setup_environment_vars() {
