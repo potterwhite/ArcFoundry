@@ -1,0 +1,9 @@
+# tools/eval/.gitignore
+# Applies to ALL per-config eval subdirs.
+# Until the eval script produces correct results, treat everything heavy
+# as transient. Once a run is verified, copy its log.txt / summary.json
+# out into a results/GOOD_<date>/ dir and untrack it from there.
+
+**/raw_outputs/
+**/results_*/
+**/logs/
