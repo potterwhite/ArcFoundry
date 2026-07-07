@@ -114,6 +114,16 @@ func_1_4_show_help() {
     echo "  distclean   : Remove .venv/, workspace/ models/, rockchip-repos/ and output/ ALMOST EVERYTHING DANGER (Factory Reset)"
     echo "  init        : Force env init (clone/pin Rockchip repos + install rknn-toolkit2 wheel; needs network)"
     echo "  help, -h    : Show this help message"
+    echo ""
+    echo "--- Toolchain override (use a non-GitHub RKNN SDK version) ---"
+    echo "  Some RKNN SDK versions (e.g. v2.4.0 for RV1126B) are NOT published"
+    echo "  on github.com/airockchip. To use one, copy the template and fill in"
+    echo "  the absolute path to your local .tgz:"
+    echo "      cp configs/common/rk-toolchain.template.yaml \\"
+    echo "         configs/common/rk-toolchain.yaml"
+    echo "      \$EDITOR configs/common/rk-toolchain.yaml   # set tarball_path + sha256"
+    echo "  arc auto-detects it. See configs/common/rk-toolchain.template.yaml"
+    echo "  for full field docs and validation rules."
 }
 
 # RKNN Toolkit Management
@@ -900,7 +910,12 @@ ${helper_output}"
             func_1_1_log "  WARNING: no SHA256 specified, integrity will NOT be checked at install"
         fi
     else
-        func_1_1_log "  No toolchain override; will use official repo (v2.3.2)"
+        # Discoverability: users on a partner-only SDK (e.g. RV1126B v2.4.0)
+        # wouldn't otherwise know this is the way in. Point at the template.
+        func_1_1_log "  No toolchain override; will use official airockchip repo (v2.3.2)."
+        func_1_1_log "  Need a non-GitHub SDK version? Copy the template and fill it in:"
+        func_1_1_log "      cp configs/common/rk-toolchain.template.yaml \\"
+        func_1_1_log "         configs/common/rk-toolchain.yaml"
     fi
 }
 
