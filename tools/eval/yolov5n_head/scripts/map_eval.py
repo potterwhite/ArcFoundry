@@ -65,37 +65,54 @@ def letterbox(im, new_shape=IMG_SIZE, color=(114, 114, 114)):
                             cv2.BORDER_CONSTANT, value=color)
     return im, r, pad
 
-# yolov5 3-head output → per-detection list [x1,y1,x2,y2,conf,cls] in feature coords
+# yolov5 3-head output → per-detection list [x1,y1,x2,y2,conf,cls] in *pixel* coords
+# (cx_pixel, cy_pixel, w_pixel, h_pixel)
 def non_max_suppression(preds, conf_thres=0.25, iou_thres=0.45,
-                        max_det=300, strides=(8, 16, 32)):
-    """preds: list of 3 tensors, each [1, 18, H, W] (channels-first)."""
+                        max_det=300, strides=(8, 16, 32), nc=1):
+    """preds: list of 3 tensors, each [1, 18, H, W] (channels-first).
+
+    Each row of the per-anchor output is [x, y, w, h, obj, cls] in raw logits.
+    Layout is `[bs, na*no, H, W]` with `na=3`, `no=4+1+nc=6` (for nc=1 head detector).
+    This model exports three SEPARATE heads (channels-first, no Detect module fuse)
+    so we have to decode each one ourselves.
+
+    Two non-obvious bits that the previous version got wrong:
+
+    1. xy is in *grid units* after the standard `2*sigmoid - 0.5 + grid` decode,
+       so it must be multiplied by `stride` to land in 640-scale pixels. wh is
+       already in pixels (`(2*sigmoid)^2 * stride`). Mixing the two units gave
+       all detections clustered near (0, 0) and IoU=0 against GT.
+
+    2. For `nc == 1`, yolov5's Detect.forward sets
+       `y[..., 5:] = y[..., 4:5]` — i.e. the cls slot is just a copy of obj,
+       not a separate probability. So the right conf is `obj` alone, not `obj*cls`
+       (which would multiply everything by ~1.0 anyway and re-rank boxes based
+       on numerical noise in cls).
+    """
     decoded = []
     for i, p in enumerate(preds):
         p = np.ascontiguousarray(p)
         bs, no, gh, gw = p.shape
-        # 18 channels = 3 anchors * (4+1+1) where per-anchor order is [x, y, w, h, obj, cls]
         # layout: [bs, anchors*6, H, W] → [bs, anchors, 6, H, W]
         p = p.reshape(bs, 3, 6, gh, gw)
         yv, xv = np.meshgrid(np.arange(gh), np.arange(gw), indexing="ij")
         grid = np.stack((xv, yv), axis=0).reshape(1, 1, 2, gh, gw).astype(np.float32)
         # yolov5 7.0 export: raw logits (sigmoid NOT baked in)
-        # xy decode: 2*sigmoid(t) - 0.5 + grid_xy
-        # wh decode: (2*sigmoid(t))^2 * stride
         def sigmoid(x):
             return 1.0 / (1.0 + np.exp(-x.astype(np.float32)))
-        p[:, :, 0:2] = 2 * sigmoid(p[:, :, 0:2]) - 0.5 + grid
+        # xy → pixels; wh → pixels. Now box is in 640-scale px space.
+        p[:, :, 0:2] = (2 * sigmoid(p[:, :, 0:2]) - 0.5 + grid) * strides[i]
         p[:, :, 2:4] = (2 * sigmoid(p[:, :, 2:4])) ** 2 * strides[i]
-        # now: [bs, anchors, 6, H, W] — flatten anchors and H*W
-        p = p.reshape(bs, -1, 6)  # [bs, anchors*gh*gw, 6]
-        p = p.reshape(bs, -1, 6)
-        decoded.append(p)
-    z = np.concatenate(decoded, axis=1)[0]  # [N_total, 6]
-    # obj and cls are RAW LOGITS, not probabilities. Apply sigmoid to both.
-    obj = 1.0 / (1.0 + np.exp(-z[:, 4:5].astype(np.float32)))
-    cls = 1.0 / (1.0 + np.exp(-z[:, 5:6].astype(np.float32)))
-    conf = obj * cls
-    keep = conf[:, 0] > conf_thres
-    z = np.concatenate([z[:, :4], conf, np.zeros((len(z), 1), dtype=np.float32)], axis=1)[keep]
+        z = p.reshape(bs, -1, 6)[0]  # [N_total, 6] in 640-scale pixel coords
+        obj = sigmoid(z[:, 4:5])
+        cls = sigmoid(z[:, 5:6])
+        # nc==1 → conf = obj (matches Detect.forward convention)
+        # nc>1  → conf = obj * cls (multi-label)
+        conf = obj if nc == 1 else obj * cls
+        decoded.append(np.concatenate([z[:, :4], conf, np.zeros((len(z), 1), dtype=np.float32)], axis=1))
+    z = np.concatenate(decoded, axis=0)  # [N_total, 6] in pixels
+    keep = z[:, 4] > conf_thres
+    z = z[keep]
     if len(z) == 0:
         return np.zeros((0, 6), dtype=np.float32)
     order = z[:, 4].argsort()[::-1][:max_det]
@@ -298,8 +315,11 @@ def main():
         for i, ip in enumerate(img_paths):
             img_id = Path(ip).stem
             _, h0, w0, lb, r, pad = imgs[img_id]
-            x = lb.astype(np.uint8)
-            outs = rknn.inference(inputs=[x])
+            # BGR (cv2) → RGB, then NCHW uint8 batch=1, matching the ONNX's
+            # `tensor(float) [1, 3, 640, 640]` input. Without `data_format='nchw'`
+            # the simulator falls back to NHWC and warns about dim layout.
+            x = lb[:, :, ::-1].astype(np.uint8).transpose(2, 0, 1)[None]  # (1, 3, 640, 640)
+            outs = rknn.inference(inputs=[x], data_format='nchw')
             for conf in CONF_THRESHOLDS:
                 dets = non_max_suppression(outs, conf_thres=conf)
                 dets = unletterbox(dets, pad, r, h0, w0)
