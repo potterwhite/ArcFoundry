@@ -21,7 +21,7 @@
 import os
 from time import sleep
 
-from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader, load_config_file
+from utils import logger, ensure_dir, cleanup_garbage, ModelDownloader, load_merged_config
 
 from .i_preprocess import Preprocessor
 from .ii_configuration import QuantizationConfigurator
@@ -36,7 +36,10 @@ class PipelineEngine:
 
     def __init__(self, config_path):
         self.config_path = config_path
-        self.cfg = load_config_file(config_path)
+        # load_merged_config auto-merges .config/common/rk-toolchain.yaml (if
+        # present) and validates the rknn_toolkit2 fields. Raises ValueError
+        # with clear file/field/fix messages on bad config.
+        self.cfg = load_merged_config(config_path)
 
         # Paths
         self.json_workspace = self.cfg.get("project",

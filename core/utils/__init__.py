@@ -21,7 +21,7 @@
 from .downloader import ModelDownloader
 from .utils import timed_input
 from .input_signature import InputSignature
-from .file_utils import load_config_file, ensure_dir, cleanup_garbage, get_input_signature_from_yaml
+from .file_utils import load_config_file, load_merged_config, ensure_dir, cleanup_garbage, get_input_signature_from_yaml
 from .log_utils import setup_logging, logger
 
 __all__ = [
@@ -38,5 +38,6 @@ __all__ = [
     'ensure_dir',
     'cleanup_garbage',
     'get_input_signature_from_yaml',
-    'load_config_file'
+    'load_config_file',
+    'load_merged_config',
 ]
