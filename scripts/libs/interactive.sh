@@ -42,7 +42,7 @@ func_3_1_resolve_config() {
 
         # If no categories found at all, error out
         if [ ${#categories[@]} -eq 0 ]; then
-            func_1_2_err "No config files found in ${CONFIG_DIR}/"
+            func_1_4_err "No config files found in ${CONFIG_DIR}/"
         fi
 
         # If only one category, skip level 1 and go straight to level 2
@@ -51,7 +51,7 @@ func_3_1_resolve_config() {
             selected_category="${categories[0]}"
         else
             # Display category menu
-            func_1_1_log "Available Model Categories:"
+            func_1_2_log "Available Model Categories:"
             local i=1
             for idx in "${!categories[@]}"; do
                 echo "  $i) ${categories[$idx]}  (${category_counts[$idx]} configs)"
@@ -64,7 +64,7 @@ func_3_1_resolve_config() {
             if [[ "$cat_choice" =~ ^[0-9]+$ ]] && [ "$cat_choice" -ge 1 ] && [ "$cat_choice" -lt "$i" ]; then
                 selected_category="${categories[$((cat_choice-1))]}"
             else
-                func_1_2_err "Invalid selection."
+                func_1_4_err "Invalid selection."
             fi
         fi
 
@@ -76,7 +76,7 @@ func_3_1_resolve_config() {
             config_files=(${CONFIG_DIR}/${selected_category}/*.yaml)
         fi
 
-        func_1_1_log "Available Configurations [${selected_category}]:"
+        func_1_2_log "Available Configurations [${selected_category}]:"
         local j=1
         for f in "${config_files[@]}"; do
             local fullname="$(basename "$f")"
@@ -91,7 +91,7 @@ func_3_1_resolve_config() {
         if [[ "$cfg_choice" =~ ^[0-9]+$ ]] && [ "$cfg_choice" -ge 1 ] && [ "$cfg_choice" -lt "$j" ]; then
             SELECTED_CONFIG="${config_files[$((cfg_choice-1))]}"
         else
-            func_1_2_err "Invalid selection."
+            func_1_4_err "Invalid selection."
         fi
 
     # Case B: User gave a short name (e.g., "rk3588s_rvm_mobilenetv3_256x256_int8")
@@ -113,7 +113,7 @@ func_3_1_resolve_config() {
             SELECTED_CONFIG="$input"
 
         else
-            func_1_2_err "Configuration not found: $input"
+            func_1_4_err "Configuration not found: $input"
         fi
     fi
 }
@@ -122,10 +122,10 @@ func_3_1_resolve_config() {
 # The actual Python Kernel launcher (Called by Mode 1, 2, 3)
 func_3_2_launch_kernel() {
     if [ -z "$SELECTED_CONFIG" ]; then
-        func_1_2_err "No configuration selected. Aborting."
+        func_1_4_err "No configuration selected. Aborting."
         return 1
     fi
-    func_1_1_log "Target Config: $(basename ${SELECTED_CONFIG})"
+    func_1_2_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
     # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
     # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
@@ -150,10 +150,10 @@ func_3_2_launch_kernel() {
     mv "${SDK_ROOT}"/debug*.onnx "${dump_dir}/" 2>/dev/null
 
     if [ $py_ret -ne 0 ]; then
-        func_1_2_err "Conversion failed with error code ${py_ret}."
+        func_1_4_err "Conversion failed with error code ${py_ret}."
     fi
 
-    func_1_1_log "Done."
+    func_1_2_log "Done."
 }
 
 

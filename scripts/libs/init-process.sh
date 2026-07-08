@@ -20,17 +20,17 @@
 # Path A: install from official airockchip repo at pinned SHA
 func_1_5_a_install_rknn_from_official_repo() {
     if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
-        func_1_1_log "RKNN Toolkit2 already installed in the virtual environment."
+        func_1_2_log "RKNN Toolkit2 already installed in the virtual environment."
         return 0
     fi
-    func_1_1_log "RKNN Toolkit2 not found. Cloning official repo (pinned to ${RKNN_TOOLKIT2_PINNED_SHA:0:7})..."
+    func_1_2_log "RKNN Toolkit2 not found. Cloning official repo (pinned to ${RKNN_TOOLKIT2_PINNED_SHA:0:7})..."
 
     local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
     mkdir -p "${repo_dir}"
     git clone "${RKNN_TOOLKIT2_REPO_URL}" "${repo_dir}" \
-        || func_1_2_err "Failed to clone rknn-toolkit2 repo."
+        || func_1_4_err "Failed to clone rknn-toolkit2 repo."
     (cd "${repo_dir}" && git checkout "${RKNN_TOOLKIT2_PINNED_SHA}") \
-        || func_1_2_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
+        || func_1_4_err "Failed to checkout pinned SHA ${RKNN_TOOLKIT2_PINNED_SHA}."
 
     func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
 }
@@ -48,39 +48,39 @@ func_1_5_b_install_rknn_from_tarball() {
 
     # 1. Validate
     if [ ! -f "${tarball_path}" ]; then
-        func_1_2_err "Tarball not found: ${tarball_path}"
+        func_1_4_err "Tarball not found: ${tarball_path}"
     fi
     if [ -n "${expected_sha256}" ]; then
         local actual_sha256
         actual_sha256=$(sha256sum "${tarball_path}" | awk '{print $1}')
         if [ "${actual_sha256}" != "${expected_sha256}" ]; then
-            func_1_2_err "SHA256 mismatch for ${tarball_path}
+            func_1_4_err "SHA256 mismatch for ${tarball_path}
     Expected: ${expected_sha256}
     Actual:   ${actual_sha256}
   Fix: re-download the tarball and update RKNN_TARBALL_SHA256 in rk-toolchain.env."
         fi
-        func_1_1_log "  SHA256 verified: ${actual_sha256:0:16}..."
+        func_1_2_log "  SHA256 verified: ${actual_sha256:0:16}..."
     else
-        func_1_1_log "  WARNING: no SHA256 specified, skipping integrity check"
+        func_1_2_log "  WARNING: no SHA256 specified, skipping integrity check"
     fi
 
     if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
-        func_1_1_log "RKNN Toolkit2 already installed in the virtual environment."
+        func_1_2_log "RKNN Toolkit2 already installed in the virtual environment."
         return 0
     fi
-    func_1_1_log "RKNN Toolkit2 not found. Extracting local tarball: $(basename "${tarball_path}")..."
+    func_1_2_log "RKNN Toolkit2 not found. Extracting local tarball: $(basename "${tarball_path}")..."
 
     # 2. Wipe and extract.
     local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
     rm -rf "${repo_dir}"
     mkdir -p "${repo_dir}"
     tar -xzf "${tarball_path}" -C "${repo_dir}" \
-        || func_1_2_err "Failed to extract tarball."
+        || func_1_4_err "Failed to extract tarball."
 
     # 3. Flatten any wrapper dir; install. Same call shape as Path A.
     func_1_5_b_1_flatten_tarball_layout "${repo_dir}"
     if [ ! -d "${repo_dir}/rknn-toolkit2/packages/x86_64" ]; then
-        func_1_2_err "After extraction, ${repo_dir}/rknn-toolkit2/packages/x86_64 is missing.
+        func_1_4_err "After extraction, ${repo_dir}/rknn-toolkit2/packages/x86_64 is missing.
   Tarball does not contain the expected RKNN wheel layout."
     fi
     func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
@@ -107,7 +107,7 @@ func_1_5_b_1_flatten_tarball_layout() {
     local inner
     inner=$(find "${repo_dir}" -mindepth 2 -maxdepth 2 -type d -name rknn-toolkit2 | head -n 1)
     if [ -z "${inner}" ] || [ ! -d "${inner}/packages" ]; then
-        func_1_2_err "Extracted tarball but cannot locate rknn-toolkit2/packages/ in any expected shape.
+        func_1_4_err "Extracted tarball but cannot locate rknn-toolkit2/packages/ in any expected shape.
   Looked for:    ${repo_dir}/rknn-toolkit2/packages/
   Also searched: ${repo_dir}/*/rknn-toolkit2/
   Tarball layout is not recognized. Extracted to: ${repo_dir}"
@@ -116,13 +116,13 @@ func_1_5_b_1_flatten_tarball_layout() {
     local wrapper
     wrapper=$(basename "$(dirname "${inner}")")
     mv "${inner}" "${repo_dir}/rknn-toolkit2" \
-        || func_1_2_err "Failed to rename ${inner} to ${repo_dir}/rknn-toolkit2"
+        || func_1_4_err "Failed to rename ${inner} to ${repo_dir}/rknn-toolkit2"
     # rmdir (not rm -rf): if the wrapper dir has stray content, fail
     # loud — the tarball likely has files outside rknn-toolkit2/ we
     # should know about.
     rmdir "$(dirname "${inner}")" 2>/dev/null \
-        || func_1_3_debug "Wrapper dir '${wrapper}/' had stray content; left in place."
-    func_1_1_log "Detected wrapper dir '${wrapper}/'; flattened to ${repo_dir}/rknn-toolkit2/"
+        || func_1_1_debug "Wrapper dir '${wrapper}/' had stray content; left in place."
+    func_1_2_log "Detected wrapper dir '${wrapper}/'; flattened to ${repo_dir}/rknn-toolkit2/"
 }
 
 # Shared: find wheel + install + requirements + onnx constraint
@@ -130,29 +130,29 @@ func_1_5_x_install_wheel_from_dir() {
     local sdk_dir="$1"
     local search_path="${sdk_dir}/packages/x86_64"
 
-    func_1_1_log "Searching for RKNN Toolkit2 wheel in ${search_path}..."
+    func_1_2_log "Searching for RKNN Toolkit2 wheel in ${search_path}..."
     local whl_file
     whl_file=$(find "${search_path}" -name "rknn_toolkit2*-${WHEEL_TAG}-${WHEEL_TAG}-*x86_64.whl" | head -n 1)
     if [ -z "${whl_file}" ]; then
-        func_1_2_err "Could not find compatible .whl in: ${search_path}"
+        func_1_4_err "Could not find compatible .whl in: ${search_path}"
     fi
 
-    func_1_1_log "Installing: $(basename "${whl_file}")"
-    "${PIP_BIN}" install "${whl_file}" || func_1_2_err "Failed to install RKNN Toolkit2."
+    func_1_2_log "Installing: $(basename "${whl_file}")"
+    "${PIP_BIN}" install "${whl_file}" || func_1_4_err "Failed to install RKNN Toolkit2."
 
     local requirements_file
     requirements_file=$(find "${search_path}" -name "requirements_${WHEEL_TAG}-*.txt" | head -n 1)
     if [ -f "${requirements_file}" ]; then
-        func_1_1_log "Installing: $(basename "${requirements_file}")"
-        "${PIP_BIN}" install -r "${requirements_file}" || func_1_2_err "Failed to install requirements.txt."
+        func_1_2_log "Installing: $(basename "${requirements_file}")"
+        "${PIP_BIN}" install -r "${requirements_file}" || func_1_4_err "Failed to install requirements.txt."
     else
-        func_1_1_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping."
+        func_1_2_log "No RKNN requirements file found for WHEEL_TAG=${WHEEL_TAG}, skipping."
     fi
 
-    func_1_1_log "Ensuring ONNX version is compatible (onnx>=1.16.1,<1.19.0)..."
-    "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_2_err "Failed to install compatible ONNX."
+    func_1_2_log "Ensuring ONNX version is compatible (onnx>=1.16.1,<1.19.0)..."
+    "${PIP_BIN}" install "onnx>=1.16.1,<1.19.0" || func_1_4_err "Failed to install compatible ONNX."
 
-    func_1_1_log "RKNN Toolkit2 installed successfully."
+    func_1_2_log "RKNN Toolkit2 installed successfully."
 }
 
 # Verify (and optionally repair) the HEAD of an existing Rockchip repo clone.
@@ -188,16 +188,16 @@ func_1_5_2_verify_pinned_sha() {
 
     # Case 2: directory exists but isn't a git repo -> caller error
     if [ ! -d "${repo_dir}/.git" ] && [ ! -f "${repo_dir}/.git" ]; then
-        func_1_2_err "${repo_dir} exists but is not a git repository. Remove it manually and re-run."
+        func_1_4_err "${repo_dir} exists but is not a git repository. Remove it manually and re-run."
     fi
 
     local current_sha
     current_sha=$(cd "${repo_dir}" && git rev-parse HEAD 2>/dev/null) \
-        || func_1_2_err "Failed to read HEAD in ${repo_dir}."
+        || func_1_4_err "Failed to read HEAD in ${repo_dir}."
 
     # Case 3: HEAD already matches pinned SHA
     if [ "${current_sha}" = "${pinned_sha}" ]; then
-        func_1_1_log "[OK] ${display_name} @ ${current_sha:0:7} (matches pinned)"
+        func_1_2_log "[OK] ${display_name} @ ${current_sha:0:7} (matches pinned)"
         return 0
     fi
 
@@ -218,13 +218,13 @@ func_1_5_2_verify_pinned_sha() {
 
     case "${answer}" in
         s|S)
-            func_1_1_log "[SKIP] ${display_name} kept at ${current_sha:0:7} (not pinned)"
+            func_1_2_log "[SKIP] ${display_name} kept at ${current_sha:0:7} (not pinned)"
             return 0
             ;;
         *)
-            func_1_1_log "[RESET] ${display_name}: ${current_sha:0:7} -> ${pinned_sha:0:7}"
+            func_1_2_log "[RESET] ${display_name}: ${current_sha:0:7} -> ${pinned_sha:0:7}"
             (cd "${repo_dir}" && git reset --hard "${pinned_sha}") \
-                || func_1_2_err "Failed to reset ${repo_dir} to pinned SHA."
+                || func_1_4_err "Failed to reset ${repo_dir} to pinned SHA."
             return 0
             ;;
     esac
@@ -246,22 +246,22 @@ func_1_5_3_clone_rknn_model_zoo() {
         local current_sha
         current_sha=$(cd "${repo_dir}" && git rev-parse HEAD 2>/dev/null) || true
         if [ "${current_sha}" = "${RKNN_MODEL_ZOO_PINNED_SHA}" ]; then
-            func_1_1_log "rknn_model_zoo already present and pinned. Skipping."
+            func_1_2_log "rknn_model_zoo already present and pinned. Skipping."
         else
-            func_1_1_log "rknn_model_zoo present at ${current_sha:0:7} (not pinned, kept by user choice). Skipping clone."
+            func_1_2_log "rknn_model_zoo present at ${current_sha:0:7} (not pinned, kept by user choice). Skipping clone."
         fi
         return 0
     fi
 
     # 2. Clone + checkout pinned SHA
-    func_1_1_log "Cloning rknn_model_zoo repository (pinned to ${RKNN_MODEL_ZOO_PINNED_TAG} / ${RKNN_MODEL_ZOO_PINNED_SHA:0:7})..."
+    func_1_2_log "Cloning rknn_model_zoo repository (pinned to ${RKNN_MODEL_ZOO_PINNED_TAG} / ${RKNN_MODEL_ZOO_PINNED_SHA:0:7})..."
     mkdir -p "$(dirname "${repo_dir}")"
     git clone "${RKNN_MODEL_ZOO_REPO_URL}" "${repo_dir}" \
-        || func_1_2_err "Failed to clone rknn_model_zoo repo."
+        || func_1_4_err "Failed to clone rknn_model_zoo repo."
     (cd "${repo_dir}" && git checkout "${RKNN_MODEL_ZOO_PINNED_SHA}") \
-        || func_1_2_err "Failed to checkout pinned SHA ${RKNN_MODEL_ZOO_PINNED_SHA}."
+        || func_1_4_err "Failed to checkout pinned SHA ${RKNN_MODEL_ZOO_PINNED_SHA}."
 
-    func_1_1_log "rknn_model_zoo cloned successfully at ${RKNN_MODEL_ZOO_PINNED_TAG}."
+    func_1_2_log "rknn_model_zoo cloned successfully at ${RKNN_MODEL_ZOO_PINNED_TAG}."
 }
 
 
@@ -290,15 +290,15 @@ func_2_1_1_setup_venv(){
 
     # Step 1: existing venv health check
     if [ -f "${PYTHON_BIN}" ] && [ -x "${PIP_BIN}" ] && "${PYTHON_BIN}" -m pip --version &> /dev/null; then
-        func_1_1_log "Virtual environment already exists and is healthy. Skipping creation."
+        func_1_2_log "Virtual environment already exists and is healthy. Skipping creation."
     else
         # If a half-broken venv exists, explain WHY we blow it away — the
         # user shouldn't be surprised by rm -rf of their venv.
         if [ -d "${VENV_DIR}" ] && [ -f "${PYTHON_BIN}" ]; then
-            func_1_1_log "Existing .venv is half-broken (python present, pip missing). Re-creating from scratch..."
+            func_1_2_log "Existing .venv is half-broken (python present, pip missing). Re-creating from scratch..."
             rm -rf "${VENV_DIR}"
         else
-            func_1_1_log "Initializing virtual environment..."
+            func_1_2_log "Initializing virtual environment..."
         fi
 
         # Step 2: create venv. Detect host python minor version so the
@@ -312,10 +312,10 @@ func_2_1_1_setup_venv(){
             # `python3.X-venv` apt package is not installed. Tell the user.
             if grep -q "ensurepip is not available" /tmp/arc_venv_err.log 2>/dev/null; then
                 rm -rf "${VENV_DIR}"
-                func_1_2_err "Python's ensurepip module is unavailable. On Debian/Ubuntu, install the venv package for your Python version:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
+                func_1_4_err "Python's ensurepip module is unavailable. On Debian/Ubuntu, install the venv package for your Python version:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
             else
                 rm -rf "${VENV_DIR}"
-                func_1_2_err "Failed to create venv at ${VENV_DIR}. See error above."
+                func_1_4_err "Failed to create venv at ${VENV_DIR}. See error above."
             fi
         fi
         rm -f /tmp/arc_venv_err.log
@@ -326,13 +326,13 @@ func_2_1_1_setup_venv(){
         # dropped during venv creation).
         if ! "${PYTHON_BIN}" -m pip --version &> /dev/null; then
             rm -rf "${VENV_DIR}"
-            func_1_2_err "Freshly-created .venv has no working pip. Likely cause: ${apt_pkg} is missing or broken. Run:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
+            func_1_4_err "Freshly-created .venv has no working pip. Likely cause: ${apt_pkg} is missing or broken. Run:    sudo apt install ${apt_pkg}    Then re-run './arc init'."
         fi
 
         # Step 3: upgrade pip. Treat failure as fatal — silently continuing
         # was the original arc's mistake that led to the "line 158: pip:
         # No such file" cryptic error two minutes later.
-        "${PIP_BIN}" install --upgrade pip || func_1_2_err "Failed to upgrade pip inside the venv. Check network/proxy."
+        "${PIP_BIN}" install --upgrade pip || func_1_4_err "Failed to upgrade pip inside the venv. Check network/proxy."
     fi
 
 }
@@ -356,7 +356,7 @@ func_2_1_2_rockchip_repos_init(){
             "${SDK_ROOT}/rockchip-repos/rknn-toolkit2" \
             "${RKNN_TOOLKIT2_PINNED_SHA}"
     else
-        func_1_1_log "Tarball mode: skipping pinned-SHA check for rknn-toolkit2."
+        func_1_2_log "Tarball mode: skipping pinned-SHA check for rknn-toolkit2."
     fi
     func_1_5_2_verify_pinned_sha \
         "rknn_model_zoo" \
@@ -376,16 +376,16 @@ func_2_1_3_python_deps_init(){
     # 3. Check Dependencies (Force check for V1.1 new deps: requests)
     #    We should run after RKNN Toolkit2 is installed to avoid conflicts.
     if ! "${PYTHON_BIN}" -c "import requests, tqdm, yaml" &> /dev/null; then
-        func_1_1_log "\nInstalling/Updating project dependencies from envs/requirements.txt ..."
+        func_1_2_log "\nInstalling/Updating project dependencies from envs/requirements.txt ..."
         "${PIP_BIN}" install -r "${SDK_ROOT}/envs/requirements.txt"
     else
-        func_1_1_log "Project dependencies already satisfied."
+        func_1_2_log "Project dependencies already satisfied."
     fi
 
 }
 
 func_2_1_4_check_rknn_and_cv2() {
-    func_1_1_log "Verifying RKNN and OpenCV environment inside the venv..."
+    func_1_2_log "Verifying RKNN and OpenCV environment inside the venv..."
 
     # First try with whatever is currently installed (RKNN wheel + official requirements)
     if "${PYTHON_BIN}" - <<'EOF'
@@ -396,15 +396,15 @@ except Exception:
     raise SystemExit(1)
 EOF
     then
-        func_1_1_log "RKNN and OpenCV imports succeeded."
+        func_1_2_log "RKNN and OpenCV imports succeeded."
         return 0
     fi
 
-    func_1_1_log "RKNN / OpenCV import failed, trying to switch to opencv-python-headless..."
+    func_1_2_log "RKNN / OpenCV import failed, trying to switch to opencv-python-headless..."
 
     # Replace GUI OpenCV with headless OpenCV (works across Python 3.8–3.12)
     "${PIP_BIN}" uninstall -y opencv-python || true
-    "${PIP_BIN}" install "opencv-python-headless==4.11.0.86" || func_1_2_err "Failed to install opencv-python-headless."
+    "${PIP_BIN}" install "opencv-python-headless==4.11.0.86" || func_1_4_err "Failed to install opencv-python-headless."
 
     # Re-check after switching to headless OpenCV
     if "${PYTHON_BIN}" - <<'EOF'
@@ -415,11 +415,11 @@ except Exception:
     raise SystemExit(1)
 EOF
     then
-        func_1_1_log "RKNN and OpenCV(headless) imports succeeded."
+        func_1_2_log "RKNN and OpenCV(headless) imports succeeded."
         return 0
     fi
 
-    func_1_2_err "RKNN / OpenCV environment check still failed even after installing opencv-python-headless."
+    func_1_4_err "RKNN / OpenCV environment check still failed even after installing opencv-python-headless."
 }
 
 # Pre-flight: read rk-toolchain.env (if present) and set CFG_RKNN_TARBALL_PATH
@@ -428,7 +428,7 @@ EOF
 func_3_3_load_toolchain_env() {
     local env_file="${SDK_ROOT}/rk-toolchain.env"
     if [ ! -f "${env_file}" ]; then
-        func_1_1_log "No rk-toolchain.env found. Will use official airockchip repo."
+        func_1_2_log "No rk-toolchain.env found. Will use official airockchip repo."
         export CFG_RKNN_TARBALL_PATH=""
         export CFG_RKNN_TARBALL_SHA256=""
         return 0
@@ -438,9 +438,9 @@ func_3_3_load_toolchain_env() {
     export CFG_RKNN_TARBALL_PATH="${RKNN_TARBALL_PATH:-}"
     export CFG_RKNN_TARBALL_SHA256="${RKNN_TARBALL_SHA256:-}"
     if [ -n "${CFG_RKNN_TARBALL_PATH}" ]; then
-        func_1_1_log "Loaded rk-toolchain.env: tarball=${CFG_RKNN_TARBALL_PATH}"
+        func_1_2_log "Loaded rk-toolchain.env successfully: tarball=${CFG_RKNN_TARBALL_PATH}"
     else
-        func_1_1_log "rk-toolchain.env present but RKNN_TARBALL_PATH empty; using official repo."
+        func_1_3_warning "rk-toolchain.env present but RKNN_TARBALL_PATH empty; using official repo."
     fi
 }
 

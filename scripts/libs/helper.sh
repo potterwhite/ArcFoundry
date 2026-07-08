@@ -4,19 +4,28 @@
 # ==============================================================================
 # Level 1: Helpers
 # ==============================================================================
-func_1_1_log() {
-    echo -e "\033[1;32m[ArcFoundry]\033[0m $1";
-}
-func_1_2_err() {
-    echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1;
-}
-func_1_3_debug() {
+func_1_1_debug() {
     # echo "DEBUG_MODE=${DEBUG_MODE}"
     if [ "${DEBUG_MODE:-0}" -ne 1 ]; then
         return
     fi
     echo -e "\033[1;33m[Debug]\033[0m $1";
 }
+
+func_1_2_log() {
+    echo -e "\033[1;32m[ArcFoundry]\033[0m $1";
+}
+
+func_1_3_warning() {
+    # \033[1;34m = Yellow, 1=bold, 33=yellow
+    # \033[0m = Reset
+    echo -e "\033[34m[Warning]\033[0m $1";
+}
+
+func_1_4_err() {
+    echo -e "\033[1;31m[ERROR]\033[0m $1"; exit 1;
+}
+
 
 func_1_13_get_python_version() {
     # Description:
@@ -61,7 +70,7 @@ func_1_13_get_python_version() {
     done
 
     # --- Fourth Stage: No valid python found ---
-    func_1_2_err "No suitable Python found (need 3.8~3.12)"
+    func_1_4_err "No suitable Python found (need 3.8~3.12)"
 }
 
 func_1_4_show_help() {
@@ -130,7 +139,7 @@ func_1_6_setup_environment_vars() {
 
     # Processing -- 1. start timer
     func_1_9_start_time_count __START_TIME
-    # func_1_1_log "Environment setup started at ${__START_TIME}."
+    # func_1_2_log "Environment setup started at ${__START_TIME}."
 
     # Preparation -- 2. Ensure Finalization on Exit
     trap func_2_4_finalize EXIT
@@ -160,6 +169,6 @@ func_1_6_setup_environment_vars() {
         python3.10) WHEEL_TAG="cp310" ;;
         python3.11) WHEEL_TAG="cp311" ;;
         python3.12) WHEEL_TAG="cp312" ;;
-        *) func_1_2_err "Unsupported Python version: $PYTHON_BIN_NAME" ;;
+        *) func_1_4_err "Unsupported Python version: $PYTHON_BIN_NAME" ;;
     esac
 }

@@ -47,7 +47,7 @@ main() {
     elif [ "$1" == "convert" ] && [ -n "$2" ]; then
         func_4_2_mode_direct "$2"
     else
-        func_1_2_err "Invalid arguments. Try './arc help'."
+        func_1_4_err "Invalid arguments. Try './arc help'."
     fi
 }
 

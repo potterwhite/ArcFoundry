@@ -50,7 +50,7 @@ func_1_11_elapsed_time_calculation() {
     local end_time=$2
     local -n elapsed_string_ref=$3
 
-    # func_1_1_log "\$1=$1 ; \$2=$2; \$3=$3"
+    # func_1_2_log "\$1=$1 ; \$2=$2; \$3=$3"
 
     local elapsed_time=$((end_time - start_time))
 
@@ -68,15 +68,15 @@ func_2_4_finalize() {
         if [[ ! -z "${__SECOND_STAGE_BUILD_START_TIME:-}" ]]; then
             local second_duration_human
             func_1_11_elapsed_time_calculation "${__SECOND_STAGE_BUILD_START_TIME}" "${final_time}" second_duration_human
-            func_1_1_log "Build elapsed time: ${second_duration_human}."
+            func_1_2_log "Build elapsed time: ${second_duration_human}."
         fi
 
         # Processing -- 2. total elapsed time statistics
         local whole_duration_human
         func_1_11_elapsed_time_calculation "${__START_TIME}" "${final_time}" whole_duration_human
-        func_1_1_log "Total elapsed time: ${whole_duration_human}."
+        func_1_2_log "Total elapsed time: ${whole_duration_human}."
     else
-        func_1_1_log "Elapsed time information not available."
+        func_1_2_log "Elapsed time information not available."
     fi
 
     exit "$exit_code"
