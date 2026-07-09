@@ -1,0 +1,95 @@
+# Copyright (c) 2026 PotterWhite — MIT License
+#
+# Configuration: rv1126b_yolov5n_head_int8_640x640
+# Target SoC  : rv1126b
+# Model       : yolov5n_head.onnx (single-class head detector, nc=1, anchors=3)
+# Resolution  : 640x640 (baked into model)
+# Precision   : int8 (asymmetric, per-tensor LUT)
+#
+# Created: 2026-07-07
+#
+# Source model details: see [[inspect-yolov5n-head-20260707]]
+#   - producer : pytorch 2.4.1, opset 12, 146 nodes, 1.76M params
+#   - input    : images [1, 3, 640, 640] FLOAT
+#   - outputs  : output0 [1,18,80,80] / 273 [1,18,40,40] / 274 [1,18,20,20]
+#   - 18 = (5 + nc=1) * 3 anchors → single-class detector
+#
+# Calibration dataset: head/images/valid/ (466 jpg, fully labeled, nc=0 only)
+#   - NOT train: would overfit activations and violate train/cal separation
+#   - NOT test: 233 imgs have no labels (still fine for calibration but smaller)
+#   - valid set: 466 imgs, class distribution matches real deployment
+#   - full list: ../yolov5/yolov5/datasets/head/calibration_list_yolov5n_head.txt (466 paths)
+#     (kept OUTSIDE the arcfoundry repo so `git clean` never wipes it)
+#   - sampling_interval: 10 → 466/10 ≈ 47 frames actually fed to RKNN
+#     (matches RKNN-Toolkit2 recommended 20-100 for nano models)
+#
+# Notes:
+#   - Use this only AFTER fp16 baseline matches onnxruntime within tolerance
+#   - asymmetric_quantized-8 is required for yolov5 (relu-heavy, no swish)
+#   - INT8 head typically 3-5x faster than fp16 on rv1126b NPU
+
+project:
+  name: "rv1126b_yolov5n_head_int8_640x640_auto-hybrid_20260709"
+  output_dir: "./output/rv1126b_yolov5n_head_int8_640x640_auto-hybrid_20260709_release"
+  workspace_dir: "./workspace/tmp"
+
+target:
+  platform: "rv1126b"
+
+build:
+  optimization_level: 3
+  verbose: true
+  pruning: false
+  eval_memory: false
+
+  quantization:
+    enabled: true           # INT8 quantization ON
+    dtype: "asymmetric_quantized-8"
+    # Calibration list lives OUTSIDE this repo (alongside the source dataset)
+    # to avoid `git clean` wiping it. Generated from head/images/valid/ (466 jpgs).
+    dataset: "/home/developer/camera-auto-tracking/models/yolov5/yolov5/datasets/head/calibration_list_yolov5n_head.txt"
+    sampling_interval: 1   # every frame from 466-list → ~466 frames
+
+    # Auto-hybrid: rknn.build(auto_hybrid=True) + cos_thresh gates which
+    # layers get auto-rolled-back to FP16. Plain INT8 (no auto_hybrid) on
+    # yolov5n_head detects 1 head; chasing the 2nd head via auto rollback.
+    # Tightened cos_thresh from default 0.98 to 0.9999 to actually engage
+    # the auto-rollback on yolov5n_head's deep backbone (single-cos ≈ 0.99990).
+    auto_hybrid:
+      enabled: true
+      cos_thresh: 0.9999
+      euc_thresh: null
+
+models:
+  - name: "yolov5n_head"
+    path: "/development/src/ai/camera-auto-tracking/models/yolov5n_head.onnx"
+    #path: "models/downloads/yolov5n_head.onnx"
+    #url: "https://example.invalid/yolov5n_head.onnx"   # TODO: replace when public
+    preprocess:
+      fix_dynamic_shape:
+        enabled: true
+        strict_override: true
+      fold_constant_inputs:
+        enabled: false       # no scalar control inputs in this model
+        inputs: {}
+      graph_surgery:
+        enabled: false       # 3 head outputs are already clean (output0 / 273 / 274)
+        outputs:
+          modify: []
+      fix_int64_type: false
+      simplify: true
+      extract_metadata: true
+    normalization:
+      # yolov5 default: uint8 → /255 → [0, 1]
+      # RKNN path: feed raw uint8, runtime applies mean/std automatically
+      # ONNX path: feed pre-divided float32, frontend.cpp does NOT re-normalize
+      mean_values: [[0, 0, 0]]
+      std_values:  [[255, 255, 255]]
+    input_shapes:
+      images: [1, 3, 640, 640]
+
+    postprocess:
+      # Derived from output channel count: 18 = (5 + 1) * 3
+      nc: 1
+      anchors: 3
+      strides: [8, 16, 32]   # 640/80, 640/40, 640/20

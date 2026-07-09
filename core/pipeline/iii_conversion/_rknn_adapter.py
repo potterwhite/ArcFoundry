@@ -70,6 +70,22 @@ class RKNNAdapter:
             # Default to what's in config, or fallback
             rknn_config_args['quantized_dtype'] = quant_config.get('dtype', 'asymmetric_quantized-8')
 
+            # Quantization algorithm: normal (default) / kl_divergence / mmse.
+            # Switch to kl_divergence or mmse when plain PTQ loses too much precision.
+            algo = quant_config.get('algorithm', 'normal')
+            if algo != 'normal':
+                rknn_config_args['quantized_algorithm'] = algo
+
+            # Auto-hybrid thresholds. These gate which layers get auto-rolled-back
+            # to FP16 when build(auto_hybrid=True) is set. RKNN SDK defaults:
+            # cos_thresh=0.98, euc_thresh=None (disabled).
+            auto_hybrid_cfg = quant_config.get('auto_hybrid', {})
+            if auto_hybrid_cfg.get('enabled', False):
+                if 'cos_thresh' in auto_hybrid_cfg:
+                    rknn_config_args['auto_hybrid_cos_thresh'] = auto_hybrid_cfg['cos_thresh']
+                if 'euc_thresh' in auto_hybrid_cfg and auto_hybrid_cfg['euc_thresh'] is not None:
+                    rknn_config_args['auto_hybrid_euc_thresh'] = auto_hybrid_cfg['euc_thresh']
+
         logger.debug(f"Config Args: {rknn_config_args}")
         self.rknn.config(**rknn_config_args)
 
@@ -128,7 +144,16 @@ class RKNNAdapter:
         do_quant = config_dict.get('quantization', {}).get('enabled', False)
         dataset = config_dict.get('quantization', {}).get('dataset', None)
 
-        build_ret = self.rknn.build(do_quantization=do_quant, dataset=dataset)
+        build_args = {
+            'do_quantization': do_quant,
+            'dataset': dataset,
+        }
+        # Flip auto_hybrid only when quantization is on (per RKNN SDK semantics).
+        auto_hybrid_cfg = config_dict.get('quantization', {}).get('auto_hybrid', {})
+        if do_quant and auto_hybrid_cfg.get('enabled', False):
+            build_args['auto_hybrid'] = True
+
+        build_ret = self.rknn.build(**build_args)
         if build_ret != 0:
             logger.error("Build RKNN failed!")
             return False
