@@ -42,15 +42,105 @@ func_1_5_a_install_rknn_from_official_repo() {
 # To stay compatible with BOTH layouts, we extract as-is, then call
 # func_1_5_b_1_flatten_tarball_layout to flatten any wrapper to the
 # Path A (git-clone) layout:  ${repo_dir}/rknn-toolkit2/
+#
+# Four-stage guard before any destructive action (rm -rf + tar -xzf):
+#
+#   STAGE 1  Wheel is already importable in the venv.
+#            -> Fast return. The venv IS our proof that the previous
+#               extraction was good; no need to re-read the tarball,
+#               no need to recompute SHA256 (which can take ~20s on
+#               a 700MB+ SDK tarball).
+#
+#   STAGE 2  Repo dir exists and has the expected SDK layout
+#            (${repo_dir}/rknn-toolkit2/packages/x86_64).
+#            -> Ask the user. We NEVER wipe good state silently.
+#               Default = keep what we have and just install the wheel.
+#
+#   STAGE 3  Repo dir exists but the layout is broken
+#            (e.g. leftover from an interrupted earlier extract).
+#            -> Same 3-way prompt as STAGE 2. SHA256 verification is
+#               deferred to STAGE 4 because it only makes sense when
+#               we are about to read the tarball.
+#
+#   STAGE 4  Cold start: nothing on disk yet (or user chose 're-extract').
+#            -> Verify tarball file existence, optionally SHA256,
+#               then wipe + extract + flatten + install.
 func_1_5_b_install_rknn_from_tarball() {
     local tarball_path="${CFG_RKNN_TARBALL_PATH}"
     local expected_sha256="${CFG_RKNN_TARBALL_SHA256:-}"
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
 
-    # 1. Validate
+    # =========================================================================
+    # STAGE 1 — Wheel already importable: nothing to do.
+    # =========================================================================
+    # Why this is the FIRST check: import rknn.api takes <1s, whereas
+    # sha256sum on a 1GB tarball takes ~20s. We must not pay the SHA
+    # cost on every ./arc invocation if the venv already has the wheel.
+    if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        func_1_2_log "RKNN Toolkit2 already installed in the venv environment. Skip ${tarball_path} installation."
+        return 0
+    fi
+
+    # =========================================================================
+    # STAGE 2 & 3 — Repo dir already on disk: ask the user.
+    # =========================================================================
+    # The downstream code would happily do `rm -rf ${repo_dir}` to start
+    # from a clean slate. But if the user left a manually-edited SDK on
+    # disk, or a previous extract left junk behind, blind rm is the
+    # wrong move. So: detect what's there and let the user choose.
+    if [ -d "${repo_dir}" ]; then
+        # -d means "is a directory"
+        local sdk_layout="${repo_dir}/rknn-toolkit2/packages/x86_64"
+
+        func_1_2_log "Existing directory detected: ${repo_dir}"
+        if [ -d "${sdk_layout}" ]; then
+            func_1_2_log "  SDK layout looks good (packages/x86_64/ found)."
+        else
+            func_1_2_log "  SDK layout is BROKEN (no rknn-toolkit2/packages/x86_64)."
+        fi
+
+        echo ""
+        echo "  Choose what to do:"
+        echo "    k) Keep existing dir, just install wheel from it  (recommended)"
+        echo "    r) Re-extract: rm -rf + tar -xzf from CFG_RKNN_TARBALL_PATH"
+        echo "    a) Abort: leave the workspace untouched"
+        echo ""
+        local choice=""
+        read -r -p "  Your choice [k/r/a] (default: k): " choice
+
+        case "${choice}" in
+            r|R)
+                func_1_2_log "User chose: re-extract from tarball."
+                # fall through to STAGE 4 below
+                ;;
+            a|A)
+                func_1_2_log "User chose: abort. Leaving ${repo_dir} as-is."
+                return 1
+                ;;
+            *)
+                func_1_2_log "User chose: keep existing dir and install wheel from it."
+                if [ ! -d "${sdk_layout}" ]; then
+                    func_1_4_err "Existing ${repo_dir} is unusable and you chose not to re-extract.
+  Fix: either re-run and pick 'r', or remove ${repo_dir} manually."
+                fi
+                func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
+                return 0
+                ;;
+        esac
+    fi
+
+    # =========================================================================
+    # STAGE 4 — Cold start, or user explicitly picked 're-extract'.
+    # =========================================================================
+    # Verify the tarball file exists, optionally check its SHA256, then
+    # wipe + extract + flatten + install. SHA256 is computed ONLY here,
+    # because it is the gate that protects bytes we are about to write.
     if [ ! -f "${tarball_path}" ]; then
         func_1_4_err "Tarball not found: ${tarball_path}"
     fi
+
     if [ -n "${expected_sha256}" ]; then
+        # `-n` = string is non-empty, i.e. user set RKNN_TARBALL_SHA256.
         local actual_sha256
         actual_sha256=$(sha256sum "${tarball_path}" | awk '{print $1}')
         if [ "${actual_sha256}" != "${expected_sha256}" ]; then
@@ -64,20 +154,16 @@ func_1_5_b_install_rknn_from_tarball() {
         func_1_2_log "  WARNING: no SHA256 specified, skipping integrity check"
     fi
 
-    if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
-        func_1_2_log "RKNN Toolkit2 already installed in the virtual environment."
-        return 0
-    fi
-    func_1_2_log "RKNN Toolkit2 not found. Extracting local tarball: $(basename "${tarball_path}")..."
+    func_1_2_log "Extracting local tarball: $(basename "${tarball_path}")..."
 
-    # 2. Wipe and extract.
-    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    # Wipe and extract. Only reached when nothing usable is on disk or
+    # the user explicitly opted in via STAGE 2/3's 'r' choice.
     rm -rf "${repo_dir}"
     mkdir -p "${repo_dir}"
     tar -xzf "${tarball_path}" -C "${repo_dir}" \
         || func_1_4_err "Failed to extract tarball."
 
-    # 3. Flatten any wrapper dir; install. Same call shape as Path A.
+    # Flatten any wrapper dir; install. Same call shape as Path A.
     func_1_5_b_1_flatten_tarball_layout "${repo_dir}"
     if [ ! -d "${repo_dir}/rknn-toolkit2/packages/x86_64" ]; then
         func_1_4_err "After extraction, ${repo_dir}/rknn-toolkit2/packages/x86_64 is missing.
@@ -176,7 +262,7 @@ func_1_5_x_install_wheel_from_dir() {
 # Returns:
 #   0 always (skip is allowed; reset is non-fatal). Only errors out if `git`
 #   itself is broken or the directory isn't a git repo.
-func_1_5_2_verify_pinned_sha() {
+func_1_5_2_verify_pinned_git_sha() {
     local display_name="$1"
     local repo_dir="$2"
     local pinned_sha="$3"
@@ -197,7 +283,7 @@ func_1_5_2_verify_pinned_sha() {
 
     # Case 3: HEAD already matches pinned SHA
     if [ "${current_sha}" = "${pinned_sha}" ]; then
-        func_1_2_log "[OK] ${display_name} @ ${current_sha:0:7} (matches pinned)"
+        func_1_2_log "[Verified] ${display_name} @ ${current_sha:0:7} (matches pinned)"
         return 0
     fi
 
@@ -233,7 +319,7 @@ func_1_5_2_verify_pinned_sha() {
 # Clone rknn_model_zoo (examples / reference scripts only — no Python wheel).
 # Mirrors func_1_5's structure: full clone + pinned SHA checkout.
 #
-# IMPORTANT: this function ASSUMES func_1_5_2_verify_pinned_sha has already
+# IMPORTANT: this function ASSUMES func_1_5_2_verify_pinned_git_sha has already
 # been called for this repo. If the directory was missing, we clone; if it
 # was kept by user choice during verify, we touch nothing here.
 func_1_5_3_clone_rknn_model_zoo() {
@@ -351,14 +437,15 @@ func_2_1_2_rockchip_repos_init(){
     # Skip rknn-toolkit2 verify under tarball mode — tarball users don't
     # have a git checkout, so pinned-SHA comparison is meaningless.
     if [ -z "${CFG_RKNN_TARBALL_PATH:-}" ]; then
-        func_1_5_2_verify_pinned_sha \
+        func_1_5_2_verify_pinned_git_sha \
             "rknn-toolkit2" \
             "${SDK_ROOT}/rockchip-repos/rknn-toolkit2" \
             "${RKNN_TOOLKIT2_PINNED_SHA}"
     else
         func_1_2_log "Tarball mode: skipping pinned-SHA check for rknn-toolkit2."
     fi
-    func_1_5_2_verify_pinned_sha \
+
+    func_1_5_2_verify_pinned_git_sha \
         "rknn_model_zoo" \
         "${SDK_ROOT}/rockchip-repos/rknn_model_zoo" \
         "${RKNN_MODEL_ZOO_PINNED_SHA}"
@@ -433,12 +520,27 @@ func_3_3_load_toolchain_env() {
         export CFG_RKNN_TARBALL_SHA256=""
         return 0
     fi
+
     # shellcheck disable=SC1090
     source "${env_file}"
+
+    if [ -z "${RKNN_TARBALL_PATH:-}" ] ; then
+        func_1_3_warning "rk-toolchain.env is present but RKNN_TARBALL_PATH is empty. It will be ignored. Please set it to the local tarball path or remove rk-toolchain.env to use the official repo."
+        return 0
+    fi
+
+    if [ -z "${RKNN_TARBALL_SHA256:-}" ] ; then
+        func_1_3_warning "rk-toolchain.env is present but RKNN_TARBALL_SHA256 is empty. It will be ignored. Please set it to the local tarball sha256 or remove rk-toolchain.env to use the official repo."
+        return 0
+    fi
+
+
     export CFG_RKNN_TARBALL_PATH="${RKNN_TARBALL_PATH:-}"
     export CFG_RKNN_TARBALL_SHA256="${RKNN_TARBALL_SHA256:-}"
     if [ -n "${CFG_RKNN_TARBALL_PATH}" ]; then
-        func_1_2_log "Loaded rk-toolchain.env successfully: tarball=${CFG_RKNN_TARBALL_PATH}"
+        func_1_2_log "Loaded rk-toolchain.env successfully: "
+        func_1_2_log "\t (1)tarball=${CFG_RKNN_TARBALL_PATH}"
+        func_1_2_log "\t (2)sha256=${CFG_RKNN_TARBALL_SHA256}"
     else
         func_1_3_warning "rk-toolchain.env present but RKNN_TARBALL_PATH empty; using official repo."
     fi
