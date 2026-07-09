@@ -172,45 +172,146 @@ func_1_5_b_install_rknn_from_tarball() {
     func_1_5_x_install_wheel_from_dir "${repo_dir}/rknn-toolkit2"
 }
 
-# Detect whether the tarball extracted with a versioned top-level
-# wrapper dir (e.g. rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/) and if so,
-# move the inner rknn-toolkit2/ up one level so the final layout matches
-# what 'git clone' produces.
+# ==============================================================================
+# Flatten a Rockchip tarball that wraps the SDK in a versioned top-level dir.
+# ==============================================================================
 #
-# Accepted in-shapes at ${repo_dir}:
-#   (a) rknn-toolkit2/packages/...           -> already correct, no-op
-#   (b) <wrapper>/rknn-toolkit2/packages/... -> mv inner up, rmdir wrapper
-# Anything else: error.
+# Background: some Rockchip tarballs extract to:
+#
+#     rknn-toolkit2-v2.4.0-2026-01-17-RV1126B/
+#     ├── CHANGELOG.md
+#     ├── LICENSE
+#     └── packages/
+#         └── x86_64/
+#             └── rknn_toolkit2-*.whl
+#
+# ...and some wrap the SDK inside an extra `rknn-toolkit2/` layer:
+#
+#     rknn-toolkit2-v2.4.0-2026-01-17/
+#     ├── CHANGELOG.md
+#     └── rknn-toolkit2/
+#         └── packages/
+#             └── x86_64/
+#                 └── rknn_toolkit2-*.whl
+#
+# ...and a tarball that has already been extracted once (and partially
+# unwrapped) may have BOTH the SDK AND a stranded wrapper:
+#
+#     rknn-toolkit2/                       <- SDK, already at top level
+#     │   └── packages/x86_64/...
+#     rknn-toolkit2-v2.4.0-2026-01-17/     <- leftover from previous extract
+#         └── CHANGELOG.md
+#
+# `git clone` produces none of this; the SDK lands at the well-known path
+# `${repo_dir}/rknn-toolkit2/`. To make the tarball path and the git-clone
+# path converge, we treat any single non-SDK top-level subdir as a wrapper
+# and unwrap it: move every entry inside it up to `${repo_dir}`, then
+# `rmdir` the now-empty wrapper. If the SDK is already at the top level
+# (i.e. the only direct child is `rknn-toolkit2/`), this is a no-op.
+#
+# Inputs:  $1 = repo_dir (absolute path, e.g. ${SDK_ROOT}/rockchip-repos/rknn-toolkit2)
+# Returns: 0 on success (already-flat OR successful unwrap)
+#          1 via func_1_4_err on any failure
+# ==============================================================================
 func_1_5_b_1_flatten_tarball_layout() {
     local repo_dir="$1"
 
-    # Case (a): no wrapper.
-    if [ -d "${repo_dir}/rknn-toolkit2/packages" ]; then
-        return 0
+    # =========================================================================
+    # Phase 1 — Enumerate wrapper candidates.
+    # =========================================================================
+    # We scan repo_dir's IMMEDIATE children only (`-mindepth 1 -maxdepth 1`).
+    # Anything deeper is the SDK's own content, not a wrapper.
+    #
+    # Exclude the entry named exactly `rknn-toolkit2/` because that IS the
+    # SDK itself (the name `git clone` would have used). Treating it as a
+    # wrapper would unwrap the SDK onto ${repo_dir} and then `rmdir` it,
+    # destroying the very tree we're trying to normalize.
+    local -a wrappers=()
+    while IFS= read -r d; do
+        local bn
+        bn=$(basename "${d}")
+        # Skip the SDK itself: same name as the git-clone output.
+        if [ "${bn}" = "rknn-toolkit2" ]; then
+            continue
+        fi
+        wrappers+=("${d}")
+    done < <(find "${repo_dir}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+
+    # =========================================================================
+    # Phase 2 — Classify: already-flat / exactly-one-wrapper / ambiguous.
+    # =========================================================================
+    #
+    # Case (a) — zero wrappers AND rknn-toolkit2/ is present:  no-op.
+    # Case (a') — zero wrappers AND rknn-toolkit2/ is ALSO absent: nothing
+    #             was extracted. This is an error: the caller (func_1_5_b)
+    #             just ran `tar -xzf` and expected SOMETHING to land here.
+    # Case (b)  — exactly one wrapper: unwrap it.
+    # Case (c)  — 2+ wrappers: refuse. We used to try to guess the right
+    #             one by name-matching `rknn-toolkit2`; that failed for
+    #             tarballs with differently-named wrappers or with
+    #             unrelated top-level dirs (e.g. docs/). Refusing is
+    #             strictly safer than guessing wrong and silently
+    #             overwriting files.
+    if [ "${#wrappers[@]}" -eq 0 ]; then
+        # Already-flat is the success path; "nothing extracted" is the bug.
+        if [ -d "${repo_dir}/rknn-toolkit2" ]; then
+            # Case (a): SDK already at top, no wrapper to remove. Done.
+            return 0
+        fi
+        # Case (a'): repo_dir is empty (or contains only loose files).
+        # tar -xzf would have errored earlier in that case, but if we got
+        # here with an empty tree, something is very wrong upstream.
+        func_1_4_err "Nothing to flatten: ${repo_dir} has no top-level subdirs and no rknn-toolkit2/ either. Was the tarball extracted correctly?"
     fi
 
-    # Case (b): wrapped. Find the inner rknn-toolkit2/ one level deep.
-    local inner
-    inner=$(find "${repo_dir}" -mindepth 2 -maxdepth 2 -type d -name rknn-toolkit2 | head -n 1)
-    if [ -z "${inner}" ] || [ ! -d "${inner}/packages" ]; then
-        func_1_4_err "Extracted tarball but cannot locate rknn-toolkit2/packages/ in any expected shape.
-  Looked for:    ${repo_dir}/rknn-toolkit2/packages/
-  Also searched: ${repo_dir}/*/rknn-toolkit2/
-  Tarball layout is not recognized. Extracted to: ${repo_dir}"
+    if [ "${#wrappers[@]}" -gt 1 ]; then
+        # Case (c): ambiguous. Print what we found so the user can decide.
+        func_1_4_err "Extracted tarball produced multiple top-level dirs under ${repo_dir}:
+$(for w in "${wrappers[@]}"; do echo "    - $(basename "${w}")"; done)
+Expected exactly one wrapper dir to unwrap. Re-run with a cleaner repo_dir."
     fi
 
-    local wrapper
-    wrapper=$(basename "$(dirname "${inner}")")
-    mv "${inner}" "${repo_dir}/rknn-toolkit2" \
-        || func_1_4_err "Failed to rename ${inner} to ${repo_dir}/rknn-toolkit2"
-    # rmdir (not rm -rf): if the wrapper dir has stray content, fail
-    # loud — the tarball likely has files outside rknn-toolkit2/ we
-    # should know about.
-    rmdir "$(dirname "${inner}")" 2>/dev/null \
-        || func_1_1_debug "Wrapper dir '${wrapper}/' had stray content; left in place."
-    func_1_2_log "Detected wrapper dir '${wrapper}/'; flattened to ${repo_dir}/rknn-toolkit2/"
+    # Case (b): exactly one wrapper. Proceed to unwrap.
+    local wrapper="${wrappers[0]}"
+    local wrapper_name
+    wrapper_name=$(basename "${wrapper}")
+
+    # =========================================================================
+    # Phase 3 — Move every entry inside the wrapper up one level.
+    # =========================================================================
+    # One entry per `mv` so an error names the exact offender (file/dir name
+    # + source path). SDK tarballs have hundreds of entries at most; the
+    # cost of N mvs is trivial compared to `tar -xzf` itself.
+    #
+    # Refuse to overwrite: if `${repo_dir}/<entry>` already exists (e.g.
+    # the user's stuck state had a top-level `rknn-toolkit2/` AND a
+    # wrapper that ALSO contained an `rknn-toolkit2/`), we'd silently
+    # destroy data. Fail loud instead.
+    local entry
+    while IFS= read -r entry; do
+        local base
+        base=$(basename "${entry}")
+        if [ -e "${repo_dir}/${base}" ] && [ "${entry}" != "${repo_dir}/${base}" ]; then
+            func_1_4_err "Cannot unwrap '${wrapper_name}/': '${repo_dir}/${base}' already exists. Refusing to overwrite."
+        fi
+        mv "${entry}" "${repo_dir}/${base}"             || func_1_4_err "Failed to move ${entry} -> ${repo_dir}/${base}"
+    done < <(find "${wrapper}" -mindepth 1 -maxdepth 1 2>/dev/null)
+
+    # =========================================================================
+    # Phase 4 — Remove the now-empty wrapper.
+    # =========================================================================
+    # `rmdir` (not `rm -rf`): if anything is left in the wrapper, the tarball
+    # had files we didn't know about — surface as an error rather than
+    # silently nuking them. The earlier `mv` loop above should have moved
+    # EVERYTHING, so a non-empty wrapper means an unexpected layout
+    # (e.g. nested subdirs deeper than -maxdepth 1 can see).
+    if [ -n "$(ls -A "${wrapper}" 2>/dev/null)" ]; then
+        func_1_4_err "Wrapper '${wrapper_name}/' still non-empty after unwrap. Aborting; inspect manually."
+    fi
+    rmdir "${wrapper}"         || func_1_4_err "Failed to rmdir now-empty wrapper '${wrapper_name}/'."
+
+    func_1_2_log "Detected wrapper dir '${wrapper_name}/'; unwrapped to ${repo_dir}/"
 }
-
 # Shared: find wheel + install + requirements + onnx constraint
 func_1_5_x_install_wheel_from_dir() {
     local sdk_dir="$1"
