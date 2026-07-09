@@ -546,6 +546,202 @@ func_3_3_load_toolchain_env() {
     fi
 }
 
+# Detect whether the workspace is already fully initialized, i.e. every
+# step inside func_2_1_init would be a no-op if we ran it again right
+# now. Pure read-only — no prompts, no side effects.
+#
+# Output: prints a 5-row progress table and a final verdict block, so
+# the caller (and the user reading ./arc output) can SEE which check
+# failed and why. Mirrors the 5 stages of func_2_1_init:
+#
+#   1/5  venv healthy
+#   2/5  RKNN wheel installed in venv
+#   3/5  rknn-toolkit2 source dir usable
+#   4/5  rknn_model_zoo cloned at pinned SHA
+#   5/5  cv2 importable
+#
+# Return code: 0 = fully initialized (every row shows [OK]);
+#             1 = at least one row shows [FAIL].
+#
+# Note: this function intentionally does NOT check func_2_1_3_python_deps_init
+# (the requests/tqdm/yaml triplet). The deps are a soft pre-flight; if
+# they are missing, func_2_1_init will install them, and that install
+# is cheap (~1s on a warm pip cache). Tracking them here would add a
+# Python import to every ./arc invocation, which is exactly the cost
+# we cut when we added the venv-health short-circuit.
+func_2_1_0_is_initialized() {
+    local repo_dir="${SDK_ROOT}/rockchip-repos/rknn-toolkit2"
+    local zoo_dir="${SDK_ROOT}/rockchip-repos/rknn_model_zoo"
+
+    # ---- Collect results in parallel arrays --------------------------------
+    # We want EVERY check to run (not short-circuit on first failure) so the
+    # user sees a complete report. We track per-check status in two parallel
+    # arrays; row N of one corresponds to row N of the other.
+    local -a labels=()
+    local -a details=()
+    local -a statuses=()  # "OK" or "FAIL"
+
+    local label detail status
+
+    # =========================================================================
+    # 1/5 — venv health
+    # =========================================================================
+    # Mirrors the existing-venv branch of func_2_1_1_setup_venv: a venv is
+    # "healthy" iff python AND pip AND `python -m pip --version` all work.
+    # Half-broken venvs (e.g. python present, pip missing) are treated as
+    # not-initialized so func_2_1_init will re-create them.
+    label="1/5  venv healthy"
+    if [ ! -x "${PYTHON_BIN}" ] || [ ! -x "${PIP_BIN}" ]; then
+        detail="python or pip missing at ${VENV_DIR}"
+        status="FAIL"
+    elif ! "${PYTHON_BIN}" -m pip --version &> /dev/null; then
+        detail="pip module not importable (half-broken venv)"
+        status="FAIL"
+    else
+        detail="${PYTHON_BIN} OK"
+        status="OK"
+    fi
+    labels+=("${label}"); details+=("${detail}"); statuses+=("${status}")
+
+    # =========================================================================
+    # 2/5 — RKNN wheel installed in venv
+    # =========================================================================
+    # ~1s of Python startup. Put after venv-health: if the venv is broken
+    # there's no point spinning up a Python that will only fail to import.
+    label="2/5  RKNN wheel installed in venv"
+    if "${PYTHON_BIN}" -c "import rknn.api" &> /dev/null; then
+        detail="import rknn.api OK"
+        status="OK"
+    else
+        detail="rknn.api not importable"
+        status="FAIL"
+    fi
+    labels+=("${label}"); details+=("${detail}"); statuses+=("${status}")
+
+    # =========================================================================
+    # 3/5 — rknn-toolkit2 source dir usable
+    # =========================================================================
+    # Two modes, decided by CFG_RKNN_TARBALL_PATH (set by func_3_3_load_toolchain_env,
+    # which the caller MUST have run before this check — see func_3_2_launch_kernel).
+    #
+    # The shape here is "linear triage": we walk down a list of failure
+    # modes, and the FIRST one that matches sets status=FAIL+detail. If we
+    # fall through all the way, status=OK. This avoids the bug-prone
+    # nested-if-else with mid-block array appends.
+    label="3/5  rknn-toolkit2 source dir usable"
+    status="OK"
+    detail=""
+    if [ -n "${CFG_RKNN_TARBALL_PATH:-}" ]; then
+        # --- Tarball mode: no git checkout, so HEAD comparison is meaningless.
+        if [ ! -d "${repo_dir}/rknn-toolkit2/packages/x86_64" ]; then
+            status="FAIL"
+            detail="tarball mode: SDK layout missing at ${repo_dir}"
+        else
+            detail="tarball mode: SDK layout present at ${repo_dir}/rknn-toolkit2/packages/x86_64"
+        fi
+    else
+        # --- Repo mode: dir must exist AND be on the pinned SHA.
+        if [ ! -d "${repo_dir}" ]; then
+            status="FAIL"
+            detail="repo mode: ${repo_dir} not cloned"
+        else
+            local current_sha
+            current_sha=$(cd "${repo_dir}" && git rev-parse HEAD 2>/dev/null) || current_sha=""
+            if [ -z "${current_sha}" ]; then
+                status="FAIL"
+                detail="repo mode: HEAD unreadable at ${repo_dir}"
+            elif [ "${current_sha}" = "${RKNN_TOOLKIT2_PINNED_SHA}" ]; then
+                detail="repo mode: HEAD=${current_sha:0:7} matches pinned"
+            else
+                status="FAIL"
+                detail="repo mode: HEAD=${current_sha:0:7} != pinned ${RKNN_TOOLKIT2_PINNED_SHA:0:7}"
+            fi
+        fi
+    fi
+    labels+=("${label}"); details+=("${detail}"); statuses+=("${status}")
+    unset status detail
+
+    # =========================================================================
+    # 4/5 — rknn_model_zoo cloned at pinned SHA
+    # =========================================================================
+    label="4/5  rknn_model_zoo cloned at pinned SHA"
+    if [ ! -d "${zoo_dir}" ]; then
+        detail="${zoo_dir} not cloned"
+        status="FAIL"
+    else
+        local zoo_sha
+        zoo_sha=$(cd "${zoo_dir}" && git rev-parse HEAD 2>/dev/null) || zoo_sha=""
+        if [ -z "${zoo_sha}" ]; then
+            detail="HEAD unreadable at ${zoo_dir}"
+            status="FAIL"
+        elif [ "${zoo_sha}" = "${RKNN_MODEL_ZOO_PINNED_SHA}" ]; then
+            detail="HEAD=${zoo_sha:0:7} matches pinned"
+            status="OK"
+        else
+            detail="HEAD=${zoo_sha:0:7} != pinned ${RKNN_MODEL_ZOO_PINNED_SHA:0:7}"
+            status="FAIL"
+        fi
+    fi
+    labels+=("${label}"); details+=("${detail}"); statuses+=("${status}")
+    unset status detail
+
+    # =========================================================================
+    # 5/5 — cv2 importable
+    # =========================================================================
+    # Matches func_2_1_4_check_rknn_and_cv2's FIRST attempt. We do NOT try
+    # the headless-openCV fallback here: that fallback MUTATES the venv,
+    # which would be a side effect for a function whose purpose is
+    # read-only detection.
+    label="5/5  cv2 importable"
+    if "${PYTHON_BIN}" -c "import rknn.api, cv2" &> /dev/null; then
+        detail="import cv2 OK"
+        status="OK"
+    else
+        detail="cv2 not importable (init would attempt headless repair)"
+        status="FAIL"
+    fi
+    labels+=("${label}"); details+=("${detail}"); statuses+=("${status}")
+
+    # =========================================================================
+    # Print the 5-row report
+    # =========================================================================
+    func_1_2_log "Workspace initialization status:"
+    local i
+    for i in 0 1 2 3 4; do
+        if [ "${statuses[$i]}" = "OK" ]; then
+            func_1_2_log "  [ OK  ] ${labels[$i]}  --  ${details[$i]}"
+        else
+            func_1_2_log "  [FAIL ] ${labels[$i]}  --  ${details[$i]}"
+        fi
+    done
+
+    # =========================================================================
+    # Final verdict
+    # =========================================================================
+    # Count failures; if any, also print a one-line "what's missing" list
+    # so the user can act without re-reading the 5 rows above.
+    local fail_count=0
+    local fail_items=()
+    for i in 0 1 2 3 4; do
+        if [ "${statuses[$i]}" = "FAIL" ]; then
+            fail_count=$((fail_count + 1))
+            fail_items+=("${labels[$i]}")
+        fi
+    done
+
+    if [ "${fail_count}" -eq 0 ]; then
+        func_1_2_log "Result: workspace is fully initialized. (5/5 checks passed)"
+        return 0
+    fi
+
+    func_1_3_warning "Result: workspace is NOT initialized (${fail_count}/5 checks failed)."
+    func_1_3_warning "Items that need initialization:"
+    for item in "${fail_items[@]}"; do
+        func_1_3_warning "  - ${item}"
+    done
+    return 1
+}
+
 func_2_1_init() {
 
     func_2_1_1_setup_venv

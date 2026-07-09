@@ -165,6 +165,13 @@ func_3_2_launch_kernel() {
 
 # Mode 1: Interactive Menu (Lazy Mode)
 func_4_1_mode_menu() {
+    func_2_1_0_is_initialized
+
+    if [ $? -ne 0 ]; then
+        func_1_4_err "Please run './arc init' first."
+        return 1
+    fi
+
     func_3_1_resolve_config ""  # Passing empty triggers the menu
     func_3_2_launch_kernel || return 1
 }
@@ -173,6 +180,13 @@ func_4_1_mode_menu() {
 func_4_2_mode_direct() {
     local target="$1"
 
+    func_2_1_0_is_initialized
+
+    if [ $? -ne 0 ]; then
+        func_1_4_err "Please run './arc init' first."
+        return 1
+    fi
+    
     func_3_1_resolve_config "$target"
     func_3_2_launch_kernel || return 1
 }
