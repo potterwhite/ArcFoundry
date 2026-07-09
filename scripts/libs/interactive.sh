@@ -127,10 +127,10 @@ func_3_2_launch_kernel() {
     fi
     func_1_2_log "Target Config: $(basename ${SELECTED_CONFIG})"
 
-    # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
-    # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
-    # Must run BEFORE func_2_1_init.
-    func_3_3_load_toolchain_env
+    # # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
+    # # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
+    # # Must run BEFORE func_2_1_init.
+    # func_3_3_load_toolchain_env
 
     func_2_1_init || return 1
 
@@ -165,6 +165,11 @@ func_3_2_launch_kernel() {
 
 # Mode 1: Interactive Menu (Lazy Mode)
 func_4_1_mode_menu() {
+    # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
+    # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
+    # Must run BEFORE func_2_1_init.
+    func_3_3_load_toolchain_env
+
     func_2_1_0_is_initialized
 
     if [ $? -ne 0 ]; then
@@ -178,6 +183,11 @@ func_4_1_mode_menu() {
 
 # Mode 2 & 3: Short Name or Explicit Path
 func_4_2_mode_direct() {
+    # Load optional rk-toolchain.env to set CFG_RKNN_TARBALL_PATH and
+    # CFG_RKNN_TARBALL_SHA256. If unset, init uses the official airockchip repo.
+    # Must run BEFORE func_2_1_init.
+    func_3_3_load_toolchain_env
+
     local target="$1"
 
     func_2_1_0_is_initialized
@@ -186,7 +196,7 @@ func_4_2_mode_direct() {
         func_1_4_err "Please run './arc init' first."
         return 1
     fi
-    
+
     func_3_1_resolve_config "$target"
     func_3_2_launch_kernel || return 1
 }
