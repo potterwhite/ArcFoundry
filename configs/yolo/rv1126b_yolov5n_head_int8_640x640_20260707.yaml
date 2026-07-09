@@ -37,7 +37,7 @@ target:
   platform: "rv1126b"
 
 build:
-  optimization_level: 2
+  optimization_level: 3
   verbose: true
   pruning: false
   eval_memory: false
@@ -47,12 +47,12 @@ build:
     dtype: "asymmetric_quantized-8"
     # Calibration list lives OUTSIDE this repo (alongside the source dataset)
     # to avoid `git clean` wiping it. Generated from head/images/valid/ (466 jpgs).
-    dataset: "/home/developer/camera-auto-tracking/yolov5/yolov5/datasets/head/calibration_list_yolov5n_head.txt"
-    sampling_interval: 10   # feed every 10th from 466-list → ~47 frames
+    dataset: "/home/developer/camera-auto-tracking/models/yolov5/yolov5/datasets/head/calibration_list_yolov5n_head.txt"
+    sampling_interval: 1   # feed every 10th from 466-list → ~47 frames
 
 models:
   - name: "yolov5n_head"
-    path: "/development/src/ai/camera-auto-tracking/ArcFoundry.git/yolov5n_head.onnx"
+    path: "/development/src/ai/camera-auto-tracking/models/yolov5n_head.onnx"
     #path: "models/downloads/yolov5n_head.onnx"
     #url: "https://example.invalid/yolov5n_head.onnx"   # TODO: replace when public
     preprocess:

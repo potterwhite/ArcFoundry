@@ -43,7 +43,7 @@ build:
 
 models:
   - name: "yolov5n_head"
-    path: "/development/src/ai/camera-auto-tracking/ArcFoundry.git/yolov5n_head.onnx"
+    path: "/development/src/ai/camera-auto-tracking/models/yolov5n_head.onnx"
     #path: "models/downloads/yolov5n_head.onnx"
     #url: "https://example.invalid/yolov5n_head.onnx"   # TODO: replace when public
     preprocess:
